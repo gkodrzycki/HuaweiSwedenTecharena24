@@ -203,16 +203,18 @@ if __name__ == "__main__":
     print("<<< Welcome to 2024 Wireless Algorithm Contest! >>>\n")
     ## For ease of data managenment, input data for different rounds are stored in different folders. Feel free to define your own
     PathSet = {
-        0: "./dataset0",
-        1: "./CompetitionData1",
-        2: "./CompetitionData2",
-        3: "./CompetitionData3",
+        0: "../dataset0",
+        1: "../CompetitionData1",
+        2: "../CompetitionData2",
+        3: "../CompetitionData3",
     }
-    PrefixSet = {0: "Dataset0", 1: "Round1", 2: "Round2", 3: "Round3"}
+    PrefixSet = {0: "Dataset0", 1: "Dataset1", 2: "Dataset2", 3: "Round3"}
+    PrefixDataSet = {0: "Round0", 1: "Round1", 2: "Round2", 3: "Round3"}
 
     Ridx = 0  # Flag defining the round of the competition, used for define where to read data。0:Test; 1: 1st round; 2: 2nd round ...
     PathRaw = PathSet[Ridx]
     Prefix = PrefixSet[Ridx]
+    PrefixData = PrefixDataSet[Ridx]
 
     ### Get all files in the folder related to the competition. Data for other rounds should be kept in a different folder
     files = os.listdir(PathRaw)
@@ -241,7 +243,7 @@ if __name__ == "__main__":
         # Read in channel data:  RoundYInputDataX.txt
         slice_samp_num = 1000  # number of samples in each slice
         slice_num = int(tol_samp_num / slice_samp_num)  # total number of slices
-        csi_path = PathRaw + "/" + Prefix + "InputData" + na + ".txt"
+        csi_path = PathRaw + "/" + PrefixData + "InputData" + na + ".txt"
 
         H = []
         for slice_idx in range(
@@ -281,14 +283,14 @@ if __name__ == "__main__":
 
         # Output, be careful with the precision
         print("Writing output position file")
-        with open(PathRaw + "/" + Prefix + "OutputPos" + na + ".txt", "w") as f:
+        with open(PathRaw + "/" + PrefixData + "OutputPos" + na + ".txt", "w") as f:
             np.savetxt(f, result, fmt="%.4f %.4f")
 
         # This help to evaluate the running time, can be removed!
         tEnd = time.perf_counter()
         print("Total time consuming = {}s\n\n".format(round(tEnd - tStart, 3)))
 
-        output_path = os.path.join(PathRaw, f"Dataset{Ridx}OutputPos{na}.txt")
+        output_path = os.path.join(PathRaw, f"Round{Ridx}OutputPos{na}.txt")
         ground_truth_path = os.path.join(PathRaw, f"Dataset0GroundTruth{na}.txt")
         if os.path.exists(ground_truth_path):
             print("Evaluating results...")
