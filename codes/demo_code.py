@@ -1,9 +1,8 @@
 import os
 import time
+from pathlib import Path
 
 import numpy as np
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.preprocessing import StandardScaler
 
 from input_handling import read_anch_file, read_cfg_file, read_slice_of_file
 from utils import calcLoc, evaluate_score, plot_distance_distribution
@@ -72,10 +71,38 @@ if __name__ == "__main__":
         # H = H.astype(np.complex64)  # trunc to complex64 to reduce storage
 
         csi_file = PathRaw + "/" + Prefix + "InputData" + na + ".npy"
-        # np.save(
-        #     csi_file, H
-        # )  # After reading the file, you may save txt file into npy, which is faster for python to read
-        H = np.load(csi_file) # if saved in npy, you can load npy file instead of txt
+
+        my_file = Path(csi_file)
+
+        if my_file.exists():
+            H = np.load(
+                csi_file
+            )  # if saved in npy, you can load npy file instead of txt
+        else:
+            print(slice_num)
+            H = []
+            for slice_idx in range(
+                slice_num
+            ):  # range(slice_num): # Read in channel data in a loop. In each loop, only one slice of channel is read in
+                print("Loading input CSI data of slice " + str(slice_idx))
+                slice_lines = read_slice_of_file(
+                    csi_path,
+                    slice_idx * slice_samp_num,
+                    (slice_idx + 1) * slice_samp_num,
+                )
+                Htmp = np.loadtxt(slice_lines)
+                Htmp = np.reshape(Htmp, (slice_samp_num, 2, sc_num, ant_num, port_num))
+                Htmp = Htmp[:, 0, :, :, :] + 1j * Htmp[:, 1, :, :, :]
+                Htmp = np.transpose(Htmp, (0, 3, 2, 1))
+                if np.size(H) == 0:
+                    H = Htmp
+                else:
+                    H = np.concatenate((H, Htmp), axis=0)
+            H = H.astype(np.complex64)  # trunc to complex64 to reduce storage
+
+            np.save(
+                csi_file, H
+            )  # After reading the file, you may save txt file into npy, which is faster for python to read
 
         tStart = time.perf_counter()
 
