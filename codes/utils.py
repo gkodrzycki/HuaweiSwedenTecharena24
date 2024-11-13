@@ -3,12 +3,8 @@ import numpy as np
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
 
-Current_Best_Sum_Score = [1066763.46, 2213384.89, 2283934.90]
-Current_Best_Mean_Score = [53.34, 110.67, 114.20]
-
-Current_Best_Sum_Score = [1066763.46, 2213384.89, 2283934.90]
-Current_Best_Mean_Score = [53.34, 110.67, 114.20]
-
+Current_Best_Sum_Score = [1059861.98, 1476891.76, 1658852.85]
+Current_Best_Mean_Score = [52.99, 73.84, 82.94]
 
 # This funcation calculates the positions of all channels, should be implemented by the participants
 def calcLoc(
@@ -84,7 +80,7 @@ def calcLoc(
 
         # Train KNN model
         knn = KNeighborsRegressor(
-            n_neighbors=min(10, len(valid_anchors)), weights="distance", metric="cosine"
+            n_neighbors=min(20, len(valid_anchors)), weights="distance"
         )
         knn.fit(X_train, y_train)
 
