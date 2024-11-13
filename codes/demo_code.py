@@ -8,6 +8,10 @@ from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
 
 
+Current_Best_Sum_Score = [1066763.46, 2213384.89, 2283934.90]
+Current_Best_Mean_Score = [53.34, 110.67, 114.20]
+
+
 # This funcation calculates the positions of all channels, should be implemented by the participants
 def calcLoc(
     H, anch_pos, bs_pos, tol_samp_num, anch_samp_num, port_num, ant_num, sc_num
@@ -44,6 +48,7 @@ def calcLoc(
             sample_features.extend(
                 [
                     np.mean(H_mag[i]),  # Overall mean
+                    # np.median(H_mag[i]),  # Overall median
                     np.std(H_mag[i]),  # Overall std
                     np.max(H_mag[i]),  # Max magnitude
                     np.min(H_mag[i]),  # Min magnitude
@@ -81,7 +86,7 @@ def calcLoc(
 
         # Train KNN model
         knn = KNeighborsRegressor(
-            n_neighbors=min(5, len(valid_anchors)), weights="distance"
+            n_neighbors=min(10, len(valid_anchors)), weights="distance", metric="cosine"
         )
         knn.fit(X_train, y_train)
 
@@ -170,17 +175,21 @@ def plot_distance_distribution(
         plt.show()
 
 
-def evaluate_score(prediction_file: str, ground_truth_file: str) -> float:
+def evaluate_score(prediction_file: str, ground_truth_file: str, dataset_ind: str) -> float:
     """
     Calculate score as sum of Euclidean distances between predicted and ground truth points.
 
     Args:
         prediction_file: Path to the file containing predicted positions (x, y)
         ground_truth_file: Path to the file containing ground truth positions (x, y)
+        dataset_ind: Index of the dataset (1, 2, 3)
 
     Returns:
         Total score (lower is better)
     """
+
+    dataset_ind = int(dataset_ind) - 1
+
     predictions = np.loadtxt(prediction_file)
     ground_truth = np.loadtxt(ground_truth_file)
 
@@ -190,11 +199,18 @@ def evaluate_score(prediction_file: str, ground_truth_file: str) -> float:
 
     mean_distance = np.mean(distances)
 
+    print(f"\n=== Best Results ===")
+    print(f"Total Score (sum of distances): {Current_Best_Sum_Score[dataset_ind]:.2f} meters")
+    print(f"Mean distance per point: {Current_Best_Mean_Score[dataset_ind]:.2f} meters")
+    print(f"Number of points evaluated: {len(distances)}")
+    print("========================")
+
     print(f"\n=== Evaluation Results ===")
     print(f"Total Score (sum of distances): {total_score:.2f} meters")
     print(f"Mean distance per point: {mean_distance:.2f} meters")
     print(f"Number of points evaluated: {len(distances)}")
     print("========================")
+    
 
     return total_score
 
@@ -209,7 +225,7 @@ if __name__ == "__main__":
         3: "../CompetitionData3",
     }
     PrefixSet = {0: "Dataset0", 1: "Dataset1", 2: "Dataset2", 3: "Round3"}
-    PrefixDataSet = {0: "Round0", 1: "Round1", 2: "Round2", 3: "Round3"}
+    PrefixDataSet = {0: "Round0", 1: "Dataset1", 2: "Round2", 3: "Round3"}
 
     Ridx = 0  # Flag defining the round of the competition, used for define where to read data。0:Test; 1: 1st round; 2: 2nd round ...
     PathRaw = PathSet[Ridx]
@@ -245,29 +261,30 @@ if __name__ == "__main__":
         slice_num = int(tol_samp_num / slice_samp_num)  # total number of slices
         csi_path = PathRaw + "/" + PrefixData + "InputData" + na + ".txt"
 
-        H = []
-        for slice_idx in range(
-            2
-        ):  # range(slice_num): # Read in channel data in a loop. In each loop, only one slice of channel is read in
-            print("Loading input CSI data of slice " + str(slice_idx))
-            slice_lines = read_slice_of_file(
-                csi_path, slice_idx * slice_samp_num, (slice_idx + 1) * slice_samp_num
-            )
-            Htmp = np.loadtxt(slice_lines)
-            Htmp = np.reshape(Htmp, (slice_samp_num, 2, sc_num, ant_num, port_num))
-            Htmp = Htmp[:, 0, :, :, :] + 1j * Htmp[:, 1, :, :, :]
-            Htmp = np.transpose(Htmp, (0, 3, 2, 1))
-            if np.size(H) == 0:
-                H = Htmp
-            else:
-                H = np.concatenate((H, Htmp), axis=0)
-        H = H.astype(np.complex64)  # trunc to complex64 to reduce storage
+        # print(slice_num)
+        # H = []
+        # for slice_idx in range(
+        #     slice_num
+        # ):  # range(slice_num): # Read in channel data in a loop. In each loop, only one slice of channel is read in
+        #     print("Loading input CSI data of slice " + str(slice_idx))
+        #     slice_lines = read_slice_of_file(
+        #         csi_path, slice_idx * slice_samp_num, (slice_idx + 1) * slice_samp_num
+        #     )
+        #     Htmp = np.loadtxt(slice_lines)
+        #     Htmp = np.reshape(Htmp, (slice_samp_num, 2, sc_num, ant_num, port_num))
+        #     Htmp = Htmp[:, 0, :, :, :] + 1j * Htmp[:, 1, :, :, :]
+        #     Htmp = np.transpose(Htmp, (0, 3, 2, 1))
+        #     if np.size(H) == 0:
+        #         H = Htmp
+        #     else:
+        #         H = np.concatenate((H, Htmp), axis=0)
+        # H = H.astype(np.complex64)  # trunc to complex64 to reduce storage
 
         csi_file = PathRaw + "/" + Prefix + "InputData" + na + ".npy"
-        np.save(
-            csi_file, H
-        )  # After reading the file, you may save txt file into npy, which is faster for python to read
-        # H = np.load(csi_file) # if saved in npy, you can load npy file instead of txt
+        # np.save(
+        #     csi_file, H
+        # )  # After reading the file, you may save txt file into npy, which is faster for python to read
+        H = np.load(csi_file) # if saved in npy, you can load npy file instead of txt
 
         tStart = time.perf_counter()
 
@@ -283,7 +300,7 @@ if __name__ == "__main__":
 
         # Output, be careful with the precision
         print("Writing output position file")
-        with open(PathRaw + "/" + PrefixData + "OutputPos" + na + ".txt", "w") as f:
+        with open(PathRaw + "/" + PrefixData + "Output" + na + ".txt", "w") as f:
             np.savetxt(f, result, fmt="%.4f %.4f")
 
         # This help to evaluate the running time, can be removed!
@@ -294,7 +311,7 @@ if __name__ == "__main__":
         ground_truth_path = os.path.join(PathRaw, f"Dataset0GroundTruth{na}.txt")
         if os.path.exists(ground_truth_path):
             print("Evaluating results...")
-            score = evaluate_score(output_path, ground_truth_path)
+            score = evaluate_score(output_path, ground_truth_path, int(na))
 
             plot_path = os.path.join(PathRaw, f"Round{Ridx}ErrorDist{na}.png")
             plot_distance_distribution(
