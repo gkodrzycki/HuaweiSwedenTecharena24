@@ -6,6 +6,7 @@ from sklearn.preprocessing import StandardScaler
 Current_Best_Sum_Score = [1059861.98, 1476891.76, 1658852.85]
 Current_Best_Mean_Score = [52.99, 73.84, 82.94]
 
+
 # This funcation calculates the positions of all channels, should be implemented by the participants
 def calcLoc(
     H, anch_pos, bs_pos, tol_samp_num, anch_samp_num, port_num, ant_num, sc_num
@@ -171,6 +172,5 @@ def evaluate_score(
     print(f"Mean distance per point: {mean_distance:.2f} meters")
     print(f"Number of points evaluated: {len(distances)}")
     print("========================")
-    
 
     return total_score

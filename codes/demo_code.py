@@ -50,26 +50,6 @@ if __name__ == "__main__":
         slice_samp_num = 1000  # number of samples in each slice
         slice_num = int(tol_samp_num / slice_samp_num)  # total number of slices
         csi_path = PathRaw + "/" + Prefix + "InputData" + na + ".txt"
-
-        # print(slice_num)
-        # H = []
-        # for slice_idx in range(
-        #     slice_num
-        # ):  # range(slice_num): # Read in channel data in a loop. In each loop, only one slice of channel is read in
-        #     print("Loading input CSI data of slice " + str(slice_idx))
-        #     slice_lines = read_slice_of_file(
-        #         csi_path, slice_idx * slice_samp_num, (slice_idx + 1) * slice_samp_num
-        #     )
-        #     Htmp = np.loadtxt(slice_lines)
-        #     Htmp = np.reshape(Htmp, (slice_samp_num, 2, sc_num, ant_num, port_num))
-        #     Htmp = Htmp[:, 0, :, :, :] + 1j * Htmp[:, 1, :, :, :]
-        #     Htmp = np.transpose(Htmp, (0, 3, 2, 1))
-        #     if np.size(H) == 0:
-        #         H = Htmp
-        #     else:
-        #         H = np.concatenate((H, Htmp), axis=0)
-        # H = H.astype(np.complex64)  # trunc to complex64 to reduce storage
-
         csi_file = PathRaw + "/" + Prefix + "InputData" + na + ".npy"
 
         my_file = Path(csi_file)
