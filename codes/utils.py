@@ -3,6 +3,9 @@ import numpy as np
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
 
+Current_Best_Sum_Score = [1066763.46, 2213384.89, 2283934.90]
+Current_Best_Mean_Score = [53.34, 110.67, 114.20]
+
 
 # This funcation calculates the positions of all channels, should be implemented by the participants
 def calcLoc(
@@ -40,6 +43,7 @@ def calcLoc(
             sample_features.extend(
                 [
                     np.mean(H_mag[i]),  # Overall mean
+                    np.median(H_mag[i]),  # Overall median
                     np.std(H_mag[i]),  # Overall std
                     np.max(H_mag[i]),  # Max magnitude
                     np.min(H_mag[i]),  # Min magnitude
@@ -77,7 +81,7 @@ def calcLoc(
 
         # Train KNN model
         knn = KNeighborsRegressor(
-            n_neighbors=min(5, len(valid_anchors)), weights="distance"
+            n_neighbors=min(10, len(valid_anchors)), weights="distance", metric="cosine"
         )
         knn.fit(X_train, y_train)
 
@@ -129,17 +133,22 @@ def plot_distance_distribution(
         plt.show()
 
 
-def evaluate_score(prediction_file: str, ground_truth_file: str) -> float:
+
+def evaluate_score(prediction_file: str, ground_truth_file: str, dataset_ind: str) -> float:
     """
     Calculate score as sum of Euclidean distances between predicted and ground truth points.
 
     Args:
         prediction_file: Path to the file containing predicted positions (x, y)
         ground_truth_file: Path to the file containing ground truth positions (x, y)
+        dataset_ind: Index of the dataset (1, 2, 3)
 
     Returns:
         Total score (lower is better)
     """
+
+    dataset_ind = int(dataset_ind) - 1
+
     predictions = np.loadtxt(prediction_file)
     ground_truth = np.loadtxt(ground_truth_file)
 
@@ -149,10 +158,17 @@ def evaluate_score(prediction_file: str, ground_truth_file: str) -> float:
 
     mean_distance = np.mean(distances)
 
+    print(f"\n=== Best Results ===")
+    print(f"Total Score (sum of distances): {Current_Best_Sum_Score[dataset_ind]:.2f} meters")
+    print(f"Mean distance per point: {Current_Best_Mean_Score[dataset_ind]:.2f} meters")
+    print(f"Number of points evaluated: {len(distances)}")
+    print("========================")
+
     print(f"\n=== Evaluation Results ===")
     print(f"Total Score (sum of distances): {total_score:.2f} meters")
     print(f"Mean distance per point: {mean_distance:.2f} meters")
     print(f"Number of points evaluated: {len(distances)}")
     print("========================")
+    
 
     return total_score
