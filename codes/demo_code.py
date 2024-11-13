@@ -1,8 +1,6 @@
-import itertools
 import os
 import time
 
-import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
@@ -214,6 +212,9 @@ def evaluate_score(prediction_file: str, ground_truth_file: str, dataset_ind: st
 
     return total_score
 
+
+from input_handling import read_anch_file, read_cfg_file, read_slice_of_file
+from utils import calcLoc, evaluate_score, plot_distance_distribution
 
 if __name__ == "__main__":
     print("<<< Welcome to 2024 Wireless Algorithm Contest! >>>\n")
