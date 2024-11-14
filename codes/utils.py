@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xgboost as xgb
 from kmeans import create_model, get_deep_features, train_model
+from sklearn.manifold import MDS
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
 
@@ -20,7 +21,7 @@ def calcLoc(
     ant_num,
     sc_num,
     kmeans_features=False,
-    xgboost_=False,
+    method: str = "KNN",
 ):
     """
     Basic implementation of channel-based localization using K-Nearest Neighbors
@@ -115,14 +116,17 @@ def calcLoc(
             valid_positions.append(anchor[1:])
 
     if len(valid_anchors) > 0:
+        print(f"Training model with {len(valid_anchors)} anchor points...")
         X_train = X_scaled[valid_anchors]
         y_train = np.array(valid_positions)
-
-        if xgboost_:
-            xgb_model = xgb.XGBRegressor(n_estimators=100, max_depth=5)
+        if method == "XGBoost":
+            xgb_model = xgb.XGBRegressor(n_estimators=10, max_depth=5)
             xgb_model.fit(X_train, y_train)
             predictions = xgb_model.predict(X_scaled)
-        else:
+        elif method == "MDS":
+            mds = MDS(n_components=2, dissimilarity="euclidean", random_state=42)
+            predictions = mds.fit_transform(X_scaled)
+        elif method == "KNN":
             # Train KNN model
             knn = KNeighborsRegressor(
                 n_neighbors=min(20, len(valid_anchors)), weights="distance"
@@ -131,6 +135,8 @@ def calcLoc(
 
             # Predict positions for the current slice
             predictions = knn.predict(X_scaled)
+        else:
+            raise ValueError(f"Invalid method: {method}")
 
         # Fill the corresponding positions in the result array
         for i in range(len(H)):

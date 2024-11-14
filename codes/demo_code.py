@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 from input_handling import read_anch_file, read_cfg_file, read_slice_of_file
+from sklearn.manifold import MDS
 from utils import calcLoc, evaluate_score, plot_distance_distribution
 
 if __name__ == "__main__":
@@ -96,7 +97,7 @@ if __name__ == "__main__":
             ant_num,
             sc_num,
             kmeans_features=False,
-            xgboost_=False,
+            method="MDS",
         )  # This function should be implemented by yourself
 
         # Replace the position information for anchor points with ground true coordinates
