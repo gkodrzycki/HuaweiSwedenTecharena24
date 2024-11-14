@@ -3,7 +3,7 @@ import numpy as np
 
 
 def create_model(n_clusters=256):
-    return KMeans(n_clusters=n_clusters, n_jobs=-1)
+    return KMeans(n_clusters=n_clusters)
 
 
 def train_model(model, X):

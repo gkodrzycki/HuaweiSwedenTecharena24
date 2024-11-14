@@ -73,7 +73,8 @@ def calcLoc(
         """
         try:
             # Reshape H_data to fit the KMeans model
-            reshaped_data = H_data.reshape(H_data.shape[0], -1)
+            H_mag = np.abs(H_data)
+            reshaped_data = H_mag.reshape(H_mag.shape[0], -1)
 
             # Create and train the KMeans model
             kmeans_model = create_model(n_clusters=256)
