@@ -88,7 +88,7 @@ if __name__ == "__main__":
 
         print("Calculating localization results")
         result = calcLoc(
-            H, anch_pos, bs_pos, tol_samp_num, anch_samp_num, port_num, ant_num, sc_num, kmeans_features=True
+            H, anch_pos, bs_pos, tol_samp_num, anch_samp_num, port_num, ant_num, sc_num, kmeans_features=False, xgboost_=False
         )  # This function should be implemented by yourself
 
         # Replace the position information for anchor points with ground true coordinates

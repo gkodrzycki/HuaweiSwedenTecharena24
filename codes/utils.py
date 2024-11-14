@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
+import xgboost as xgb
 
 from kmeans import create_model, train_model, get_deep_features
 
@@ -13,7 +14,7 @@ Current_Best_Mean_Score = [52.99, 73.84, 82.94]
 # This funcation calculates the positions of all channels, should be implemented by the participants
 def calcLoc(
     H, anch_pos, bs_pos, tol_samp_num, anch_samp_num, port_num, ant_num, sc_num, kmeans_features=False
-):
+, xgboost_=False):
     """
     Basic implementation of channel-based localization using K-Nearest Neighbors
 
@@ -110,14 +111,19 @@ def calcLoc(
         X_train = X_scaled[valid_anchors]
         y_train = np.array(valid_positions)
 
-        # Train KNN model
-        knn = KNeighborsRegressor(
-            n_neighbors=min(20, len(valid_anchors)), weights="distance"
-        )
-        knn.fit(X_train, y_train)
+        if xgboost_:
+            xgb_model = xgb.XGBRegressor(n_estimators=100, max_depth=5)
+            xgb_model.fit(X_train, y_train)
+            predictions = xgb_model.predict(X_scaled)
+        else:
+            # Train KNN model
+            knn = KNeighborsRegressor(
+                n_neighbors=min(20, len(valid_anchors)), weights="distance"
+            )
+            knn.fit(X_train, y_train)
 
-        # Predict positions for the current slice
-        predictions = knn.predict(X_scaled)
+            # Predict positions for the current slice
+            predictions = knn.predict(X_scaled)
 
         # Fill the corresponding positions in the result array
         for i in range(len(H)):

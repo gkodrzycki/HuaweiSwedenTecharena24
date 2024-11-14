@@ -11,6 +11,7 @@ scikit-learn = "^1.5.2"
 matplotlib = "^3.9.2"
 black = "^24.10.0"
 isort = "^5.13.2"
+xgboost = "^2.1.1"
 
 
 [build-system]
