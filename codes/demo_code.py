@@ -3,7 +3,6 @@ import time
 from pathlib import Path
 
 import numpy as np
-
 from input_handling import read_anch_file, read_cfg_file, read_slice_of_file
 from utils import calcLoc, evaluate_score, plot_distance_distribution
 
@@ -88,7 +87,16 @@ if __name__ == "__main__":
 
         print("Calculating localization results")
         result = calcLoc(
-            H, anch_pos, bs_pos, tol_samp_num, anch_samp_num, port_num, ant_num, sc_num, kmeans_features=False, xgboost_=False
+            H,
+            anch_pos,
+            bs_pos,
+            tol_samp_num,
+            anch_samp_num,
+            port_num,
+            ant_num,
+            sc_num,
+            kmeans_features=False,
+            xgboost_=False,
         )  # This function should be implemented by yourself
 
         # Replace the position information for anchor points with ground true coordinates

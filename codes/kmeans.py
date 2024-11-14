@@ -1,5 +1,5 @@
-from sklearn.cluster import KMeans
 import numpy as np
+from sklearn.cluster import KMeans
 
 
 def create_model(n_clusters=256):
@@ -16,5 +16,7 @@ def get_centroids(model):
 
 def get_deep_features(model, X):
     centroids = get_centroids(model)
-    distances = np.array([np.sqrt(np.sum((X - centroid) ** 2, axis=1)) for centroid in centroids])
+    distances = np.array(
+        [np.sqrt(np.sum((X - centroid) ** 2, axis=1)) for centroid in centroids]
+    )
     return distances.T

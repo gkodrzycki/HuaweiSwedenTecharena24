@@ -1,11 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import xgboost as xgb
+from kmeans import create_model, get_deep_features, train_model
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
-import xgboost as xgb
-
-from kmeans import create_model, train_model, get_deep_features
-
 
 Current_Best_Sum_Score = [1059861.98, 1476891.76, 1658852.85]
 Current_Best_Mean_Score = [52.99, 73.84, 82.94]
@@ -13,8 +11,17 @@ Current_Best_Mean_Score = [52.99, 73.84, 82.94]
 
 # This funcation calculates the positions of all channels, should be implemented by the participants
 def calcLoc(
-    H, anch_pos, bs_pos, tol_samp_num, anch_samp_num, port_num, ant_num, sc_num, kmeans_features=False
-, xgboost_=False):
+    H,
+    anch_pos,
+    bs_pos,
+    tol_samp_num,
+    anch_samp_num,
+    port_num,
+    ant_num,
+    sc_num,
+    kmeans_features=False,
+    xgboost_=False,
+):
     """
     Basic implementation of channel-based localization using K-Nearest Neighbors
 
