@@ -3,13 +3,16 @@ import numpy as np
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
 
+from kmeans import create_model, train_model, get_deep_features
+
+
 Current_Best_Sum_Score = [1059861.98, 1476891.76, 1658852.85]
 Current_Best_Mean_Score = [52.99, 73.84, 82.94]
 
 
 # This funcation calculates the positions of all channels, should be implemented by the participants
 def calcLoc(
-    H, anch_pos, bs_pos, tol_samp_num, anch_samp_num, port_num, ant_num, sc_num
+    H, anch_pos, bs_pos, tol_samp_num, anch_samp_num, port_num, ant_num, sc_num, kmeans_features=False
 ):
     """
     Basic implementation of channel-based localization using K-Nearest Neighbors
@@ -58,8 +61,35 @@ def calcLoc(
 
         return np.array(features)
 
+    def extract_features_kmeans(H_data):
+        """
+        Extract features from channel data using KMeans clustering.
+
+        Args:
+            H_data: Complex channel data of shape (num_samples, ant_num, sc_num, port_num)
+
+        Returns:
+            Deep features extracted from the KMeans model.
+        """
+        try:
+            # Reshape H_data to fit the KMeans model
+            reshaped_data = H_data.reshape(H_data.shape[0], -1)
+
+            # Create and train the KMeans model
+            kmeans_model = create_model(n_clusters=256)
+            train_model(kmeans_model, reshaped_data)
+
+            # Extract deep features
+            deep_features = get_deep_features(kmeans_model, reshaped_data)
+
+            return deep_features
+        except Exception as e:
+            print(f"An error occurred during KMeans feature extraction: {e}")
+            return None
+
     # Extract features from available channel data
-    X = extract_features(H)
+    print("Extracting features...")
+    X = extract_features(H) if not kmeans_features else extract_features_kmeans(H)
 
     # Normalize features
     scaler = StandardScaler()
@@ -160,15 +190,11 @@ def evaluate_score(
     mean_distance = np.mean(distances)
 
     print(f"\n=== Best Results ===")
-    print(
-        f"Total Score (sum of distances): {Current_Best_Sum_Score[dataset_ind]:.2f} meters"
-    )
     print(f"Mean distance per point: {Current_Best_Mean_Score[dataset_ind]:.2f} meters")
     print(f"Number of points evaluated: {len(distances)}")
     print("========================")
 
     print(f"\n=== Evaluation Results ===")
-    print(f"Total Score (sum of distances): {total_score:.2f} meters")
     print(f"Mean distance per point: {mean_distance:.2f} meters")
     print(f"Number of points evaluated: {len(distances)}")
     print("========================")
