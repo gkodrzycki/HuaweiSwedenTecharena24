@@ -26,7 +26,7 @@ if __name__ == "__main__":
     files = os.listdir(PathRaw)
 
     names = []
-    for f in sorted(files):
+    for f in sorted(files)[:1]:
         if f.find("CfgData") != -1 and f.endswith(".txt"):
             names.append(f.split("CfgData")[-1].split(".txt")[0])
 
@@ -97,7 +97,7 @@ if __name__ == "__main__":
             ant_num,
             sc_num,
             kmeans_features=False,
-            method="MDS",
+            method="Siamese",
         )  # This function should be implemented by yourself
 
         # Replace the position information for anchor points with ground true coordinates

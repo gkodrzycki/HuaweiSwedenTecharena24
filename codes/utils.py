@@ -1,10 +1,14 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 import xgboost as xgb
 from kmeans import create_model, get_deep_features, train_model
+from siamese import SiameseDataset, SiameseLoss, SiameseNetwork
 from sklearn.manifold import MDS
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler
+from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 Current_Best_Sum_Score = [1059861.98, 1476891.76, 1658852.85]
 Current_Best_Mean_Score = [52.99, 73.84, 82.94]
@@ -119,7 +123,45 @@ def calcLoc(
         print(f"Training model with {len(valid_anchors)} anchor points...")
         X_train = X_scaled[valid_anchors]
         y_train = np.array(valid_positions)
-        if method == "XGBoost":
+        if method == "Siamese":
+            input_dim = X_scaled.shape[1]
+            learning_rate = 0.0003
+            num_epochs = 20_000
+            dataset = SiameseDataset(X_scaled, valid_anchors, y_train)
+            dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
+            model = SiameseNetwork(input_dim)
+            model.to("cuda")
+            criterion = SiameseLoss()
+            optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+            for epoch in (pbar := tqdm(range(num_epochs))):
+                model.train()
+                total_loss = 0
+                for x1, x2, d_ij in dataloader:
+                    optimizer.zero_grad()
+
+                    z1, z2, _ = model(x1, x2)
+                    loss = criterion(z1, z2, d_ij)
+                    loss.backward()
+
+                    optimizer.step()
+                    total_loss += loss.item()
+                pbar.set_description(
+                    f"Epoch {epoch + 1}/{num_epochs}, Loss: {total_loss / len(dataloader):.4f}"
+                )
+
+            with torch.no_grad():
+                pairs = create_pairs(X_scaled)
+                predictions = []
+                for x1, x2 in pairs:
+                    x1_tensor = torch.tensor(x1, dtype=torch.float32).unsqueeze(0)
+                    x2_tensor = torch.tensor(x2, dtype=torch.float32).unsqueeze(0)
+
+                    z1, z2, output = model(x1_tensor.to("cuda"), x2_tensor.to("cuda"))
+                    predictions.append(output.cpu().numpy())
+
+                predictions = np.array(predictions)
+            torch.save(model.state_dict(), "siamese_model_state_dict.pth")
+        elif method == "XGBoost":
             xgb_model = xgb.XGBRegressor(n_estimators=10, max_depth=5)
             xgb_model.fit(X_train, y_train)
             predictions = xgb_model.predict(X_scaled)
@@ -220,3 +262,13 @@ def evaluate_score(
     print("========================")
 
     return total_score
+
+
+def create_pairs(X_scaled):
+    pairs = []
+    num_samples = len(X_scaled)
+    for i in range(num_samples):
+        # Randomly select another sample to form a pair with the i-th sample
+        j = np.random.choice([x for x in range(num_samples) if x != i])
+        pairs.append((X_scaled[i], X_scaled[j]))  # Create a pair of (x1, x2)
+    return pairs
