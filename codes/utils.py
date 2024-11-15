@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 Current_Best_Sum_Score = [1059861.98, 1476891.76, 1658852.85]
-Current_Best_Mean_Score = [52.99, 73.84, 82.94]
+Current_Best_Mean_Score = [21.39, 48.17, 68.93]
 
 
 # This funcation calculates the positions of all channels, should be implemented by the participants
@@ -310,6 +310,168 @@ def calcLoc(
         return features
 
 
+    def extract_features_v3(csi_data, normalize=True, verbose=True):
+        """
+        Extract features from CSI data with improved spatial and polarization awareness
+        
+        Parameters:
+        -----------
+        csi_data : ndarray
+            Complex-valued CSI measurements of shape (n_samples, n_ue_ant, n_bs_ant, n_subcarriers)
+            where n_bs_ant=64 (32 antennas × 2 polarizations)
+        normalize : bool, optional
+            Whether to normalize features (default=True)
+        verbose : bool, optional
+            Whether to print progress information (default=True)
+            
+        Returns:
+        --------
+        features : ndarray
+            Extracted features matrix
+        """
+        
+        n_samples, n_ue_ant, n_bs_ant, n_subcarriers = csi_data.shape
+        features = []
+        
+        # Constants for antenna array structure
+        N_POL = 2  # Number of polarizations
+        N_COLS = 8  # Number of columns per polarization
+        N_ROWS = 4  # Number of rows per polarization
+        
+        if verbose:
+            print(f"\nInput shape: {csi_data.shape}")
+            print("\nAntenna array structure:")
+            print(f"- {N_POL} polarizations")
+            print(f"- {N_COLS} columns per polarization")
+            print(f"- {N_ROWS} rows per polarization")
+        
+        # Reshape data to separate polarizations
+        # Shape: (n_samples, n_ue_ant, 2, 32, n_subcarriers)
+        csi_pol = csi_data.reshape(n_samples, n_ue_ant, N_POL, -1, n_subcarriers)
+        
+        feature_count = 0
+        
+        # 1. Polarization-specific features
+        if verbose:
+            print("\n1. Computing Polarization-specific Features...")
+        
+        for ue_ant in range(n_ue_ant):
+            for pol in range(N_POL):
+                # Basic statistics per polarization
+                pol_amp = np.abs(csi_pol[:, ue_ant, pol, :, :])
+                pol_phase = np.angle(csi_pol[:, ue_ant, pol, :, :])
+                
+                # Amplitude statistics
+                features.extend([
+                    np.mean(pol_amp, axis=(1, 2)),  # Mean across antennas and subcarriers
+                    np.std(pol_amp, axis=(1, 2)),
+                    np.var(pol_amp, axis=(1, 2))
+                ])
+                
+                # Phase statistics
+                features.extend([
+                    np.mean(pol_phase, axis=(1, 2)),
+                    np.std(pol_phase, axis=(1, 2)),
+                    np.var(pol_phase, axis=(1, 2))
+                ])
+                
+                feature_count += 6
+        
+        # 2. Cross-polarization features
+        if verbose:
+            print("\n2. Computing Cross-polarization Features...")
+        
+        for ue_ant in range(n_ue_ant):
+            # Correlation between polarizations
+            pol1_data = np.abs(csi_pol[:, ue_ant, 0, :, :])
+            pol2_data = np.abs(csi_pol[:, ue_ant, 1, :, :])
+            
+            cross_pol_corr = np.array([
+                np.corrcoef(pol1_data[i].flatten(), pol2_data[i].flatten())[0, 1]
+                for i in range(n_samples)
+            ])
+            features.append(cross_pol_corr)
+            feature_count += 1
+        
+        # 3. Spatial domain features (using array structure)
+        if verbose:
+            print("\n3. Computing Spatial Domain Features...")
+        
+        # Reshape to get column structure
+        # Shape: (n_samples, n_ue_ant, n_pol, n_cols, n_rows, n_subcarriers)
+        csi_spatial = csi_pol.reshape(n_samples, n_ue_ant, N_POL, N_COLS, N_ROWS, n_subcarriers)
+        
+        for ue_ant in range(n_ue_ant):
+            for pol in range(N_POL):
+                # Column-wise correlation
+                for col in range(N_COLS-1):
+                    col_corr = np.array([
+                        np.corrcoef(
+                            np.abs(csi_spatial[i, ue_ant, pol, col]).flatten(),
+                            np.abs(csi_spatial[i, ue_ant, pol, col+1]).flatten()
+                        )[0, 1]
+                        for i in range(n_samples)
+                    ])
+                    features.append(col_corr)
+                    feature_count += 1
+                
+                # Row-wise correlation
+                for row in range(N_ROWS-1):
+                    row_corr = np.array([
+                        np.corrcoef(
+                            np.abs(csi_spatial[i, ue_ant, pol, :, row]).flatten(),
+                            np.abs(csi_spatial[i, ue_ant, pol, :, row+1]).flatten()
+                        )[0, 1]
+                        for i in range(n_samples)
+                    ])
+                    features.append(row_corr)
+                    feature_count += 1
+        
+        # 4. Beam-space features
+        if verbose:
+            print("\n4. Computing Beam-space Features...")
+        
+        for ue_ant in range(n_ue_ant):
+            for pol in range(N_POL):
+                # Apply 2D FFT across spatial dimensions
+                beam_space = np.fft.fft2(
+                    csi_spatial[:, ue_ant, pol, :, :, :],
+                    axes=(1, 2)  # Apply across columns and rows
+                )
+                beam_mag = np.abs(beam_space)
+                
+                # Extract beam-space statistics
+                features.extend([
+                    np.mean(beam_mag, axis=(1, 2, 3)),  # Mean across spatial and frequency
+                    np.std(beam_mag, axis=(1, 2, 3)),
+                    np.max(beam_mag, axis=(1, 2, 3))
+                ])
+                feature_count += 3
+        
+        # # 5. Include original features
+        # if verbose:
+        #     print("\n5. Adding original CSI features...")
+        
+        # original_features = extract_features_v2(csi_data, normalize=False, verbose=False)
+        # features.append(original_features)
+        # feature_count += original_features.shape[1]
+        
+        # Combine all features
+        features = np.column_stack(features)
+        
+        if normalize:
+            if verbose:
+                print("\nNormalizing features...")
+            features = (features - np.mean(features, axis=0)) / (np.std(features, axis=0) + 1e-10)
+        
+        if verbose:
+            print("\nFeature extraction completed!")
+            print(f"Final feature matrix shape: {features.shape}")
+            #print(f"New features added: {feature_count - original_features.shape[1]}")
+        
+        return features
+
+
 
     def extract_features_kmeans(H_data):
         """
@@ -341,6 +503,11 @@ def calcLoc(
     # Extract features from available channel data
     print("Extracting features...")
     
+
+    # If not third slice is used, extract additional features
+    if int(na) != 3:
+        X_new = extract_features_v3(H) 
+    
     
     feature_file = PathRaw + "/" + Prefix + "Features" + f"{na}" + ".npy"
     print(f"Saving/Retrieving features to/from {feature_file}")
@@ -358,6 +525,11 @@ def calcLoc(
         np.save(
             feature_file, X
         ) 
+
+    # If not third slice is used, extract additional features
+    if int(na) != 3:
+        X = np.column_stack((X, X_new))
+
 
     # Normalize features
     X_scaled = X
