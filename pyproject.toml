@@ -12,8 +12,6 @@ matplotlib = "^3.9.2"
 black = "^24.10.0"
 isort = "^5.13.2"
 xgboost = "^2.1.1"
-torch = "^2.5.1"
-tqdm = "^4.67.0"
 
 
 [build-system]

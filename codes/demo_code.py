@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 from input_handling import read_anch_file, read_cfg_file, read_slice_of_file
 from sklearn.manifold import MDS
-from utils import calcLoc, evaluate_score, plot_distance_distribution, plot_scatter_GroundTruth, plot_predictions_vs_truth, enhanced_calcLoc
+from utils import calcLoc, evaluate_score, plot_distance_distribution, plot_scatter_GroundTruth, plot_predictions_vs_truth
 
 if __name__ == "__main__":
     print("<<< Welcome to 2024 Wireless Algorithm Contest! >>>\n")
@@ -18,7 +18,7 @@ if __name__ == "__main__":
     }
     PrefixSet = {0: "Dataset0", 1: "Dataset1", 2: "Dataset2", 3: "Round3"}
 
-    Ridx = 0  # Flag defining the round of the competition, used for define where to read data。0:Test; 1: 1st round; 2: 2nd round ...
+    Ridx = 1  # Flag defining the round of the competition, used for define where to read data。0:Test; 1: 1st round; 2: 2nd round ...
     PathRaw = PathSet[Ridx]
     Prefix = PrefixSet[Ridx]
 
@@ -92,24 +92,7 @@ if __name__ == "__main__":
 
         print("Calculating localization results")
 
-        # result = calcLoc(
-        #     H,
-        #     anch_pos,
-        #     bs_pos,
-        #     tol_samp_num,
-        #     anch_samp_num,
-        #     port_num,
-        #     ant_num,
-        #     sc_num,
-        #     kmeans_features=False,
-        #     method="XGBoost",
-        #     PathRaw=PathRaw,
-        #     Prefix=Prefix,
-        #     na=na,
-
-        # )  # This function should be implemented by yourself
-
-        result = enhanced_calcLoc(
+        result = calcLoc(
             H,
             anch_pos,
             bs_pos,
@@ -118,9 +101,12 @@ if __name__ == "__main__":
             port_num,
             ant_num,
             sc_num,
+            kmeans_features=False,
             method="XGBoost",
             PathRaw=PathRaw,
             Prefix=Prefix,
+            na=na,
+
         )  # This function should be implemented by yourself
 
         # Replace the position information for anchor points with ground true coordinates

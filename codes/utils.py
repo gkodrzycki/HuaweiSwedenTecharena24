@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.ensemble import RandomForestRegressor
 import torch
 import xgboost as xgb
 from kmeans import create_model, get_deep_features, train_model
@@ -19,9 +18,11 @@ from sklearn.model_selection import GridSearchCV
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+Current_Best_Sum_Score = [1059861.98, 1476891.76, 1658852.85]
 Current_Best_Mean_Score = [21.39, 48.17, 68.93]
 
 
+# This funcation calculates the positions of all channels, should be implemented by the participants
 def calcLoc(
     H,
     anch_pos,
@@ -53,8 +54,38 @@ def calcLoc(
     Returns:
         Predicted positions array of shape (tol_samp_num, 2)
     """
+    # Create result array
     loc_result = np.zeros([tol_samp_num, 2], "float")
 
+    # Extract features from channel data
+    def extract_features(H_data):
+        # Calculate channel magnitude
+        H_mag = np.abs(H_data)
+
+        # Extract basic statistical features
+        features = []
+        for i in range(H_data.shape[0]):
+            sample_features = []
+            # Mean over different dimensions
+            sample_features.extend(
+                [
+                    np.mean(H_mag[i]),  # Overall mean
+                    np.median(H_mag[i]),  # Overall median
+                    np.std(H_mag[i]),  # Overall std
+                    np.max(H_mag[i]),  # Max magnitude
+                    np.min(H_mag[i]),  # Min magnitude
+                ]
+            )
+
+            # Add mean per antenna
+            ant_means = np.mean(H_mag[i], axis=(1, 2))
+            sample_features.extend(ant_means)
+
+            features.append(sample_features)
+
+        return np.array(features)
+
+    
 
     def extract_features_v2(csi_data, normalize=True, verbose=True):
         """
@@ -86,6 +117,7 @@ def calcLoc(
             print(f"Number of subcarriers: {n_subcarriers}")
             print("\nStarting feature extraction...")
         
+        # 1. Basic CSI Features
         if verbose:
             print("\n1. Computing Basic CSI Features...")
             print("   - Converting to amplitude and phase")
@@ -93,6 +125,7 @@ def calcLoc(
         phase = np.angle(csi_data)
         phase_unwrapped = np.unwrap(phase, axis=3)
         
+        # 2. Statistical Features per antenna combination
         if verbose:
             print("\n2. Computing Statistical Features...")
             print("   - Processing each UE-BS antenna pair")
@@ -103,10 +136,12 @@ def calcLoc(
                 if verbose:
                     print(f"   - Processing UE ant {ue_ant+1}/{n_ue_ant}, BS ant {bs_ant+1}/{n_bs_ant}")
                 
+                # Amplitude statistics along subcarrier dimension
                 amp_mean = np.mean(amplitude[:, ue_ant, bs_ant, :], axis=1)
                 amp_std = np.std(amplitude[:, ue_ant, bs_ant, :], axis=1)
                 amp_var = np.var(amplitude[:, ue_ant, bs_ant, :], axis=1)
                 
+                # Phase statistics along subcarrier dimension
                 phase_mean = np.mean(phase_unwrapped[:, ue_ant, bs_ant, :], axis=1)
                 phase_std = np.std(phase_unwrapped[:, ue_ant, bs_ant, :], axis=1)
                 phase_var = np.var(phase_unwrapped[:, ue_ant, bs_ant, :], axis=1)
@@ -117,9 +152,11 @@ def calcLoc(
         if verbose:
             print(f"   Features extracted so far: {feature_count}")
         
+        # 3. Cross-antenna Features
         if verbose:
             print("\n3. Computing Cross-antenna Features...")
         
+        # 3.1 UE antenna correlations
         if n_ue_ant > 1:
             if verbose:
                 print("   - Computing UE antenna correlations")
@@ -130,6 +167,18 @@ def calcLoc(
                                     for i in range(n_samples)])
                     features.append(corr_ue)
                     feature_count += 1
+        
+        # # 3.2 BS antenna correlations
+        # if n_bs_ant > 1:
+        #     if verbose:
+        #         print("   - Computing BS antenna correlations")
+        #     for (ant1, ant2) in combinations(range(n_bs_ant), 2):
+        #         for ue_ant in range(n_ue_ant):
+        #             corr_bs = np.array([np.corrcoef(amplitude[i, ue_ant, ant1, :],
+        #                                         amplitude[i, ue_ant, ant2, :])[0, 1]
+        #                             for i in range(n_samples)])
+        #             features.append(corr_bs)
+        #             feature_count += 1
         
         if verbose:
             print(f"   Features extracted so far: {feature_count}")
@@ -157,7 +206,29 @@ def calcLoc(
         
         if verbose:
             print(f"   Features extracted so far: {feature_count}")
-
+        
+        # # 5. Advanced Statistical Features
+        # if verbose:
+        #     print("\n5. Computing Advanced Statistical Features...")
+        
+        # for ue_ant in range(n_ue_ant):
+        #     for bs_ant in range(n_bs_ant):
+        #         if verbose:
+        #             print(f"   - Processing UE ant {ue_ant+1}/{n_ue_ant}, BS ant {bs_ant+1}/{n_bs_ant}")
+                
+        #         subcarrier_mean = np.mean(amplitude[:, ue_ant, bs_ant, :], axis=0)
+        #         subcarrier_std = np.std(amplitude[:, ue_ant, bs_ant, :], axis=0)
+                
+        #         kurt = kurtosis(amplitude[:, ue_ant, bs_ant, :], axis=1)
+        #         skewness = skew(amplitude[:, ue_ant, bs_ant, :], axis=1)
+                
+        #         features.extend([subcarrier_mean, subcarrier_std, kurt, skewness])
+        #         feature_count += 4
+        
+        # if verbose:
+        #     print(f"   Features extracted so far: {feature_count}")
+        
+        # 6. Time-Frequency Features
         if verbose:
             print("\n6. Computing Time-Frequency Features...")
         
@@ -262,6 +333,7 @@ def calcLoc(
         n_samples, n_ue_ant, n_bs_ant, n_subcarriers = csi_data.shape
         features = []
         
+        # Constants for antenna array structure
         N_POL = 2  # Number of polarizations
         N_COLS = 8  # Number of columns per polarization
         N_ROWS = 4  # Number of rows per polarization
@@ -428,8 +500,11 @@ def calcLoc(
             print(f"An error occurred during KMeans feature extraction: {e}")
             return None
 
+    # Extract features from available channel data
     print("Extracting features...")
     
+
+    # If not third slice is used, extract additional features
     if int(na) != 3:
         X_new = extract_features_v3(H) 
     
@@ -451,17 +526,21 @@ def calcLoc(
             feature_file, X
         ) 
 
+    # If not third slice is used, extract additional features
     if int(na) != 3:
         X = np.column_stack((X, X_new))
 
+
+    # Normalize features
     X_scaled = X
 
+    # Prepare training data from anchor points that are within our current slice
     valid_anchors = []
     valid_positions = []
 
     for anchor in anch_pos:
-        idx = int(anchor[0]) - 1  
-        if idx < len(H): 
+        idx = int(anchor[0]) - 1  # Convert to 0-based index
+        if idx < len(H):  # Only use anchors that are in our current slice
             valid_anchors.append(idx)
             valid_positions.append(anchor[1:])
 
@@ -508,6 +587,11 @@ def calcLoc(
                 predictions = np.array(predictions)
             torch.save(model.state_dict(), "siamese_model_state_dict.pth")
         elif method == "XGBoost":
+            # xgb_model = xgb.XGBRegressor()
+            # reg_cv = GridSearchCV(xgb_model, {"colsample_bytree":[1.0],"min_child_weight":[1.0,1.2]
+            #                 ,'max_depth': [3,4,6], 'n_estimators': [50,100,200]}, verbose=2, n_jobs=-1)
+            # reg_cv.fit(X_train,y_train)
+            # print(reg_cv.best_params_)
             xgb_model = xgb.XGBRegressor(n_estimators = 100, max_depth = 7, n_jobs=-1)
             xgb_model.fit(X_train, y_train)
             predictions = xgb_model.predict(X_scaled)
@@ -520,11 +604,13 @@ def calcLoc(
             mds = MDS(n_components=2, dissimilarity="euclidean", random_state=42, n_jobs=-1)
             predictions = mds.fit_transform(X_scaled)
         elif method == "KNN":
+            # Train KNN model
             knn = KNeighborsRegressor(
                 n_neighbors=min(5, len(valid_anchors)), weights="distance"
             )
             knn.fit(X_train, y_train)
 
+            # Predict positions for the current slice
             predictions = knn.predict(X_scaled)
         elif method == "skowi_test":
             knn = KNeighborsRegressor(
@@ -556,256 +642,17 @@ def calcLoc(
             plt.legend()
             plt.show()
 
+            # plt.figure(figsize=(10, 6))
+            # plt.scatter(ground_truth[:, 0], ground_truth[:, 1], label="Ground Truth")
+
         else:
             raise ValueError(f"Invalid method: {method}")
 
+        # Fill the corresponding positions in the result array
         for i in range(len(H)):
             loc_result[i] = predictions[i]
 
     return loc_result
-
-
-def enhance_csi_features(csi_data, dh=0.5, dv=2.0, fc=3.5e9, subcarrier_spacing=240e3, verbose=True):
-    """
-    Extract enhanced CSI features considering array geometry and signal parameters
-    
-    Parameters:
-    -----------
-    csi_data : ndarray
-        Complex CSI data of shape (n_samples, n_ue_ant, n_bs_ant, n_subcarriers)
-    dh : float
-        Horizontal antenna spacing in wavelengths (default=0.5)
-    dv : float
-        Vertical antenna spacing in wavelengths (default=2.0)
-    fc : float
-        Carrier frequency in Hz (default=3.5GHz)
-    subcarrier_spacing : float
-        Effective subcarrier spacing in Hz (default=240kHz)
-    """
-    
-    n_samples, n_ue_ant, n_bs_ant, n_subcarriers = csi_data.shape
-    features = []
-    
-    # Array configuration
-    N_POL = 2
-    N_COLS = 8
-    N_ROWS = 4
-    
-    # Wavelength calculation
-    c = 3e8  # speed of light
-    wavelength = c / fc
-    
-    # Convert to physical distances
-    dx = dh * wavelength
-    dy = dv * wavelength
-    
-    # Reshape data to separate polarizations and spatial structure
-    csi_pol = csi_data.reshape(n_samples, n_ue_ant, N_POL, N_ROWS, N_COLS, n_subcarriers)
-    
-    if verbose:
-        print("\n1. Computing Spatial-Frequency Features...")
-    
-    for pol in range(N_POL):
-        # 1. Beam-Space Domain Transform
-        beam_space = np.fft.fft2(csi_pol[:, :, pol, :, :, :], axes=(3, 4))
-        beam_mag = np.abs(beam_space)
-        
-        # Find indices of dominant beams
-        beam_mag_flat = beam_mag.reshape(*beam_mag.shape[:3], -1)
-        flat_max_idx = np.argmax(beam_mag_flat, axis=-1)
-        spatial_dims = beam_mag.shape[3:5]  # Dynamically get (N_ROWS, N_COLS)
-        max_beam_idx = np.unravel_index(flat_max_idx, spatial_dims)
-
-        # Compute beam angles
-        row_idx, col_idx = max_beam_idx
-        normalized_row = (row_idx - (spatial_dims[0] // 2)) / (spatial_dims[0] // 2)
-        normalized_col = (col_idx - (spatial_dims[1] // 2)) / (spatial_dims[1] // 2)
-
-        magnitude = np.sqrt(normalized_row**2 + normalized_col**2)
-        magnitude = np.clip(magnitude, -1, 1)  # Ensure valid input for arcsin
-        beam_angles = np.arcsin(magnitude)
-
-        features.extend([
-            np.mean(beam_angles, axis=(1, 2)),
-            np.std(beam_angles, axis=(1, 2))
-        ])
-        
-        # 2. Delay-Angle Domain Features
-        delay_angle = np.fft.fft(csi_pol[:, :, pol, :, :, :], axis=-1)
-        delay_mag = np.abs(delay_angle)
-        
-        delay_spread = np.std(delay_mag, axis=-1)
-        angle_spread = np.std(delay_mag, axis=(3, 4))
-        
-        features.extend([
-            np.mean(delay_spread, axis=(1, 2)),
-            np.mean(angle_spread, axis=1)
-        ])
-        
-        # 3. Cross-Polarization Ratio (XPR)
-        if pol == 0:
-            xpr = np.abs(csi_pol[:, :, 0, :, :, :]) / (np.abs(csi_pol[:, :, 1, :, :, :]) + 1e-10)
-            features.extend([
-                np.mean(xpr, axis=(1, 2, 3, 4)),  # Correct axis specification
-                np.std(xpr, axis=(1, 2, 3, 4))
-            ])
-    
-    # 4. Subarray Features
-    if verbose:
-        print("2. Computing Subarray Features...")
-    
-    # Split array into subarrays
-    for pol in range(N_POL):
-        for i in range(0, N_ROWS-1, 2):
-            for j in range(0, N_COLS-1, 2):
-                subarray = csi_pol[:, :, pol, i:i+2, j:j+2, :]
-                
-                # Compute subarray correlation matrix
-                corr_matrix = np.zeros((n_samples, 4, 4))
-                for s in range(n_samples):
-                    flat_subarray = subarray[s].reshape(-1, n_subcarriers)
-                    corr_matrix[s] = np.corrcoef(flat_subarray)
-                
-                # Extract eigenvalues of correlation matrix
-                eigenvals = np.linalg.eigvalsh(corr_matrix)
-                features.extend([
-                    np.mean(eigenvals, axis=1),
-                    np.std(eigenvals, axis=1)
-                ])
-    
-    # 5. Frequency-Domain Features
-    if verbose:
-        print("3. Computing Enhanced Frequency Features...")
-    
-    # Compute frequency response correlation
-    freq_corr = np.zeros((n_samples, n_subcarriers-1))
-    for i in range(n_subcarriers-1):
-        freq_corr[:, i] = np.abs(np.sum(
-            csi_data[:, :, :, i] * np.conj(csi_data[:, :, :, i+1]),
-            axis=(1, 2)
-        ))
-    
-    features.extend([
-        np.mean(freq_corr, axis=1),
-        np.std(freq_corr, axis=1),
-        np.max(freq_corr, axis=1)
-    ])
-    
-    # Combine all features
-    features = np.column_stack(features)
-    
-    if verbose:
-        print(f"\nTotal features extracted: {features.shape[1]}")
-    
-    return features
-
-def create_enhanced_model(X_train, y_train, method="Ensemble"):
-    """
-    Create an enhanced model for localization
-    """
-    if method == "Ensemble":
-        # Create base models
-        models = {
-            'xgb': xgb.XGBRegressor(
-                n_estimators=200,
-                max_depth=7,
-                learning_rate=0.01,
-                subsample=0.8,
-                colsample_bytree=0.8,
-                n_jobs=-1
-            ),
-            'rf': RandomForestRegressor(
-                n_estimators=200,
-                max_depth=10,
-                min_samples_split=5,
-                n_jobs=-1
-            ),
-            'knn': KNeighborsRegressor(
-                n_neighbors=5,
-                weights='distance',
-                metric='manhattan'
-            )
-        }
-        
-        # Train base models
-        predictions = {}
-        for name, model in models.items():
-            model.fit(X_train, y_train)
-            predictions[name] = model.predict(X_train)
-        
-        # Create meta-features
-        meta_features = np.column_stack([pred for pred in predictions.values()])
-        
-        # Train meta-model
-        meta_model = xgb.XGBRegressor(
-            n_estimators=100,
-            max_depth=5,
-            learning_rate=0.01
-        )
-        meta_model.fit(meta_features, y_train)
-        
-        return models, meta_model
-    else:
-        return None
-
-def predict_location(models, meta_model, X_test):
-    """
-    Make predictions using the ensemble model
-    """
-    # Get predictions from base models
-    predictions = {}
-    for name, model in models.items():
-        predictions[name] = model.predict(X_test)
-    
-    # Create meta-features
-    meta_features = np.column_stack([pred for pred in predictions.values()])
-    
-    # Make final predictions
-    final_predictions = meta_model.predict(meta_features)
-    
-    return final_predictions
-
-def enhanced_calcLoc(H, anch_pos, bs_pos, tol_samp_num, anch_samp_num, port_num, ant_num, sc_num,
-                    method="Ensemble", PathRaw="", Prefix=""):
-    """
-    Enhanced implementation of channel-based localization
-    """
-    print("Extracting enhanced features...")
-    
-    # Extract enhanced features
-    X = enhance_csi_features(H)
-    
-    # Save features
-    feature_file = PathRaw + "/" + Prefix + "EnhancedFeatures.npy"
-    np.save(feature_file, X)
-    
-    # Prepare training data
-    valid_anchors = []
-    valid_positions = []
-    for anchor in anch_pos:
-        idx = int(anchor[0]) - 1
-        if idx < len(H):
-            valid_anchors.append(idx)
-            valid_positions.append(anchor[1:])
-    
-    if len(valid_anchors) > 0:
-        X_train = X[valid_anchors]
-        y_train = np.array(valid_positions)
-        
-        # Train enhanced model
-        models, meta_model = create_enhanced_model(X_train, y_train, method)
-        
-        # Make predictions
-        predictions = predict_location(models, meta_model, X)
-        
-        # Return results
-        loc_result = np.zeros([tol_samp_num, 2], "float")
-        for i in range(len(H)):
-            loc_result[i] = predictions[i]
-        
-        return loc_result
-    
-    return np.zeros([tol_samp_num, 2], "float")
 
 
 def plot_distance_distribution(
