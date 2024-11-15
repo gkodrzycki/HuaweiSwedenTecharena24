@@ -12,6 +12,7 @@ from scipy.stats import kurtosis, skew
 from scipy.fft import fft, fftshift
 from itertools import combinations
 from pathlib import Path
+from sklearn.model_selection import GridSearchCV
 
 
 from torch.utils.data import DataLoader
@@ -378,7 +379,7 @@ def calcLoc(
         if method == "Siamese":
             input_dim = X_scaled.shape[1]
             learning_rate = 0.0003
-            num_epochs = 20_000
+            num_epochs = 1_000
             dataset = SiameseDataset(X_scaled, valid_anchors, y_train)
             dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
             model = SiameseNetwork(input_dim)
@@ -414,9 +415,19 @@ def calcLoc(
                 predictions = np.array(predictions)
             torch.save(model.state_dict(), "siamese_model_state_dict.pth")
         elif method == "XGBoost":
-            xgb_model = xgb.XGBRegressor(n_estimators=10, max_depth=5)
+            # xgb_model = xgb.XGBRegressor()
+            # reg_cv = GridSearchCV(xgb_model, {"colsample_bytree":[1.0],"min_child_weight":[1.0,1.2]
+            #                 ,'max_depth': [3,4,6], 'n_estimators': [50,100,200]}, verbose=2, n_jobs=-1)
+            # reg_cv.fit(X_train,y_train)
+            # print(reg_cv.best_params_)
+            xgb_model = xgb.XGBRegressor(n_estimators = 100, max_depth = 7, n_jobs=-1)
             xgb_model.fit(X_train, y_train)
             predictions = xgb_model.predict(X_scaled)
+        elif method == "RandomForest":
+            from sklearn.ensemble import RandomForestRegressor
+            rf = RandomForestRegressor(n_estimators=100, max_depth=2, random_state=42)
+            rf.fit(X_train, y_train)
+            predictions = rf.predict(X_scaled)
         elif method == "MDS":
             mds = MDS(n_components=2, dissimilarity="euclidean", random_state=42, n_jobs=-1)
             predictions = mds.fit_transform(X_scaled)

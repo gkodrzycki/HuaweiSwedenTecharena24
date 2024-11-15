@@ -18,7 +18,7 @@ if __name__ == "__main__":
     }
     PrefixSet = {0: "Dataset0", 1: "Dataset1", 2: "Dataset2", 3: "Round3"}
 
-    Ridx = 1  # Flag defining the round of the competition, used for define where to read data。0:Test; 1: 1st round; 2: 2nd round ...
+    Ridx = 0  # Flag defining the round of the competition, used for define where to read data。0:Test; 1: 1st round; 2: 2nd round ...
     PathRaw = PathSet[Ridx]
     Prefix = PrefixSet[Ridx]
 
@@ -26,8 +26,9 @@ if __name__ == "__main__":
     files = os.listdir(PathRaw)
 
     names = []
-    for f in sorted(files)[:1]:
+    for f in sorted(files):
         if f.find("CfgData") != -1 and f.endswith(".txt"):
+            print(f)
             names.append(f.split("CfgData")[-1].split(".txt")[0])
 
 
@@ -101,7 +102,7 @@ if __name__ == "__main__":
             ant_num,
             sc_num,
             kmeans_features=False,
-            method="KNN",
+            method="RandomForest",
             PathRaw=PathRaw,
             Prefix=Prefix,
             na=na,
