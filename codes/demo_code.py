@@ -26,7 +26,7 @@ if __name__ == "__main__":
     files = os.listdir(PathRaw)
 
     names = []
-    for f in sorted(files):
+    for f in sorted(files)[:1]:
         if f.find("CfgData") != -1 and f.endswith(".txt"):
             names.append(f.split("CfgData")[-1].split(".txt")[0])
 
