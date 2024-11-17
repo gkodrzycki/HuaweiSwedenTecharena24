@@ -18,377 +18,10 @@ from sklearn.model_selection import GridSearchCV
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+Current_Best_Sum_Score = [1059861.98, 1476891.76, 1658852.85]
 Current_Best_Mean_Score = [21.39, 48.17, 68.93]
 
-# Extract features from channel data
-def extract_features_v2(csi_data, normalize=True, verbose=True):
-    """
-    Extract features from CSI data with dimension order: (n_samples, n_ue_ant, n_bs_ant, n_subcarriers)
-    
-    Parameters:
-    -----------
-    csi_data : ndarray
-        Complex-valued CSI measurements of shape (n_samples, n_ue_ant, n_bs_ant, n_subcarriers)
-    normalize : bool, optional
-        Whether to normalize features (default=True)
-    verbose : bool, optional
-        Whether to print progress information (default=True)
-        
-    Returns:
-    --------
-    features : ndarray
-        Extracted features matrix
-    """
-    
-    n_samples, n_ue_ant, n_bs_ant, n_subcarriers = csi_data.shape
-    features = []
-    
-    if verbose:
-        print(f"\nInput shape: {csi_data.shape}")
-        print(f"Number of samples: {n_samples}")
-        print(f"Number of UE antennas: {n_ue_ant}")
-        print(f"Number of BS antennas: {n_bs_ant}")
-        print(f"Number of subcarriers: {n_subcarriers}")
-        print("\nStarting feature extraction...")
-    
-    # 1. Basic CSI Features
-    if verbose:
-        print("\n1. Computing Basic CSI Features...")
-        print("   - Converting to amplitude and phase")
-    amplitude = np.abs(csi_data)
-    phase = np.angle(csi_data)
-    phase_unwrapped = np.unwrap(phase, axis=3)
-    
-    # 2. Statistical Features per antenna combination
-    if verbose:
-        print("\n2. Computing Statistical Features...")
-        print("   - Processing each UE-BS antenna pair")
-    
-    feature_count = 0
-    for ue_ant in range(n_ue_ant):
-        for bs_ant in range(n_bs_ant):
-            if verbose:
-                print(f"   - Processing UE ant {ue_ant+1}/{n_ue_ant}, BS ant {bs_ant+1}/{n_bs_ant}")
-            
-            # Amplitude statistics along subcarrier dimension
-            amp_mean = np.mean(amplitude[:, ue_ant, bs_ant, :], axis=1)
-            amp_std = np.std(amplitude[:, ue_ant, bs_ant, :], axis=1)
-            amp_var = np.var(amplitude[:, ue_ant, bs_ant, :], axis=1)
-            
-            # Phase statistics along subcarrier dimension
-            phase_mean = np.mean(phase_unwrapped[:, ue_ant, bs_ant, :], axis=1)
-            phase_std = np.std(phase_unwrapped[:, ue_ant, bs_ant, :], axis=1)
-            phase_var = np.var(phase_unwrapped[:, ue_ant, bs_ant, :], axis=1)
-            
-            features.extend([amp_mean, amp_std, amp_var, phase_mean, phase_std, phase_var])
-            feature_count += 6
-    
-    if verbose:
-        print(f"   Features extracted so far: {feature_count}")
-    
-    # 3. Cross-antenna Features
-    if verbose:
-        print("\n3. Computing Cross-antenna Features...")
-    
-    # 3.1 UE antenna correlations
-    if n_ue_ant > 1:
-        if verbose:
-            print("   - Computing UE antenna correlations")
-        for (ant1, ant2) in combinations(range(n_ue_ant), 2):
-            for bs_ant in range(n_bs_ant):
-                corr_ue = np.array([np.corrcoef(amplitude[i, ant1, bs_ant, :],
-                                            amplitude[i, ant2, bs_ant, :])[0, 1]
-                                for i in range(n_samples)])
-                features.append(corr_ue)
-                feature_count += 1
-    
-    if verbose:
-        print(f"   Features extracted so far: {feature_count}")
-    
 
-    # 4. Frequency Domain Features
-    if verbose:
-        print("\n4. Computing Frequency Domain Features...")
-    
-    for ue_ant in range(n_ue_ant):
-        for bs_ant in range(n_bs_ant):
-            if verbose:
-                print(f"   - Processing UE ant {ue_ant+1}/{n_ue_ant}, BS ant {bs_ant+1}/{n_bs_ant}")
-            
-            fft_data = fft(csi_data[:, ue_ant, bs_ant, :], axis=1)
-            fft_mag = np.abs(fftshift(fft_data, axes=1))
-            
-            fft_mean = np.mean(fft_mag, axis=1)
-            fft_std = np.std(fft_mag, axis=1)
-            fft_peak = np.max(fft_mag, axis=1)
-            fft_peak_idx = np.argmax(fft_mag, axis=1)
-            
-            features.extend([fft_mean, fft_std, fft_peak, fft_peak_idx])
-            feature_count += 4
-    
-    if verbose:
-        print(f"   Features extracted so far: {feature_count}")
-    
-    # 6. Time-Frequency Features
-    if verbose:
-        print("\n6. Computing Time-Frequency Features...")
-    
-    for ue_ant in range(n_ue_ant):
-        for bs_ant in range(n_bs_ant):
-            if verbose:
-                print(f"   - Processing UE ant {ue_ant+1}/{n_ue_ant}, BS ant {bs_ant+1}/{n_bs_ant}")
-            
-            f, t, Sxx = signal.spectrogram(amplitude[:, ue_ant, bs_ant, :],
-                                        fs=n_subcarriers,
-                                        nperseg=min(32, n_subcarriers))
-            
-            spec_mean = np.mean(Sxx, axis=(1, 2))
-            spec_std = np.std(Sxx, axis=(1, 2))
-            spec_max = np.max(Sxx, axis=(1, 2))
-            
-            features.extend([spec_mean, spec_std, spec_max])
-            feature_count += 3
-    
-    if verbose:
-        print(f"   Features extracted so far: {feature_count}")
-    
-    # 7. Delay-Domain Features
-    if verbose:
-        print("\n7. Computing Delay-Domain Features...")
-    
-    for ue_ant in range(n_ue_ant):
-        for bs_ant in range(n_bs_ant):
-            if verbose:
-                print(f"   - Processing UE ant {ue_ant+1}/{n_ue_ant}, BS ant {bs_ant+1}/{n_bs_ant}")
-            
-            delay_response = np.fft.ifft(csi_data[:, ue_ant, bs_ant, :], axis=1)
-            delay_mag = np.abs(delay_response)
-            
-            delay_peak = np.max(delay_mag, axis=1)
-            delay_mean = np.mean(delay_mag, axis=1)
-            delay_spread = np.std(delay_mag, axis=1)
-            
-            features.extend([delay_peak, delay_mean, delay_spread])
-            feature_count += 3
-    
-    if verbose:
-        print(f"   Features extracted so far: {feature_count}")
-    
-    # 8. Cross-Domain Features
-    if verbose:
-        print("\n8. Computing Cross-Domain Features...")
-    
-    for ue_ant in range(n_ue_ant):
-        for bs_ant in range(n_bs_ant):
-            if verbose:
-                print(f"   - Processing UE ant {ue_ant+1}/{n_ue_ant}, BS ant {bs_ant+1}/{n_bs_ant}")
-            
-            freq_domain = np.abs(fft(csi_data[:, ue_ant, bs_ant, :], axis=1))
-            delay_domain = np.abs(np.fft.ifft(csi_data[:, ue_ant, bs_ant, :], axis=1))
-            
-            cross_corr = np.array([np.corrcoef(freq_domain[i, :], 
-                                            delay_domain[i, :])[0, 1]
-                                for i in range(n_samples)])
-            features.append(cross_corr)
-            feature_count += 1
-    
-    # Combine all features
-    features = np.column_stack(features)
-    
-    if verbose:
-        print(f"\nTotal number of features extracted: {features.shape[1]}")
-    
-    # Normalize if requested
-    if normalize:
-        if verbose:
-            print("\nNormalizing features...")
-        features = (features - np.mean(features, axis=0)) / (np.std(features, axis=0) + 1e-10)
-    
-    if verbose:
-        print("\nFeature extraction completed!")
-        print(f"Final feature matrix shape: {features.shape}")
-    
-    return features
-
-def extract_features_v3(csi_data, normalize=True, verbose=True):
-    """
-    Extract features from CSI data with improved spatial and polarization awareness
-    
-    Parameters:
-    -----------
-    csi_data : ndarray
-        Complex-valued CSI measurements of shape (n_samples, n_ue_ant, n_bs_ant, n_subcarriers)
-        where n_bs_ant=64 (32 antennas × 2 polarizations)
-    normalize : bool, optional
-        Whether to normalize features (default=True)
-    verbose : bool, optional
-        Whether to print progress information (default=True)
-        
-    Returns:
-    --------
-    features : ndarray
-        Extracted features matrix
-    """
-    
-    n_samples, n_ue_ant, n_bs_ant, n_subcarriers = csi_data.shape
-    features = []
-    
-    # Constants for antenna array structure
-    N_POL = 2  # Number of polarizations
-    N_COLS = 8  # Number of columns per polarization
-    N_ROWS = 4  # Number of rows per polarization
-    
-    if verbose:
-        print(f"\nInput shape: {csi_data.shape}")
-        print("\nAntenna array structure:")
-        print(f"- {N_POL} polarizations")
-        print(f"- {N_COLS} columns per polarization")
-        print(f"- {N_ROWS} rows per polarization")
-    
-    # Reshape data to separate polarizations
-    # Shape: (n_samples, n_ue_ant, 2, 32, n_subcarriers)
-    csi_pol = csi_data.reshape(n_samples, n_ue_ant, N_POL, -1, n_subcarriers)
-    
-    feature_count = 0
-    
-    # 1. Polarization-specific features
-    if verbose:
-        print("\n1. Computing Polarization-specific Features...")
-    
-    for ue_ant in range(n_ue_ant):
-        for pol in range(N_POL):
-            # Basic statistics per polarization
-            pol_amp = np.abs(csi_pol[:, ue_ant, pol, :, :])
-            pol_phase = np.angle(csi_pol[:, ue_ant, pol, :, :])
-            
-            # Amplitude statistics
-            features.extend([
-                np.mean(pol_amp, axis=(1, 2)),  # Mean across antennas and subcarriers
-                np.std(pol_amp, axis=(1, 2)),
-                np.var(pol_amp, axis=(1, 2))
-            ])
-            
-            # Phase statistics
-            features.extend([
-                np.mean(pol_phase, axis=(1, 2)),
-                np.std(pol_phase, axis=(1, 2)),
-                np.var(pol_phase, axis=(1, 2))
-            ])
-            
-            feature_count += 6
-    
-    # 2. Cross-polarization features
-    if verbose:
-        print("\n2. Computing Cross-polarization Features...")
-    
-    for ue_ant in range(n_ue_ant):
-        # Correlation between polarizations
-        pol1_data = np.abs(csi_pol[:, ue_ant, 0, :, :])
-        pol2_data = np.abs(csi_pol[:, ue_ant, 1, :, :])
-        
-        cross_pol_corr = np.array([
-            np.corrcoef(pol1_data[i].flatten(), pol2_data[i].flatten())[0, 1]
-            for i in range(n_samples)
-        ])
-        features.append(cross_pol_corr)
-        feature_count += 1
-    
-    # 3. Spatial domain features (using array structure)
-    if verbose:
-        print("\n3. Computing Spatial Domain Features...")
-    
-    # Reshape to get column structure
-    # Shape: (n_samples, n_ue_ant, n_pol, n_cols, n_rows, n_subcarriers)
-    csi_spatial = csi_pol.reshape(n_samples, n_ue_ant, N_POL, N_COLS, N_ROWS, n_subcarriers)
-    
-    for ue_ant in range(n_ue_ant):
-        for pol in range(N_POL):
-            # Column-wise correlation
-            for col in range(N_COLS-1):
-                col_corr = np.array([
-                    np.corrcoef(
-                        np.abs(csi_spatial[i, ue_ant, pol, col]).flatten(),
-                        np.abs(csi_spatial[i, ue_ant, pol, col+1]).flatten()
-                    )[0, 1]
-                    for i in range(n_samples)
-                ])
-                features.append(col_corr)
-                feature_count += 1
-            
-            # Row-wise correlation
-            for row in range(N_ROWS-1):
-                row_corr = np.array([
-                    np.corrcoef(
-                        np.abs(csi_spatial[i, ue_ant, pol, :, row]).flatten(),
-                        np.abs(csi_spatial[i, ue_ant, pol, :, row+1]).flatten()
-                    )[0, 1]
-                    for i in range(n_samples)
-                ])
-                features.append(row_corr)
-                feature_count += 1
-    
-    # 4. Beam-space features
-    if verbose:
-        print("\n4. Computing Beam-space Features...")
-    
-    for ue_ant in range(n_ue_ant):
-        for pol in range(N_POL):
-            # Apply 2D FFT across spatial dimensions
-            beam_space = np.fft.fft2(
-                csi_spatial[:, ue_ant, pol, :, :, :],
-                axes=(1, 2)  # Apply across columns and rows
-            )
-            beam_mag = np.abs(beam_space)
-            
-            # Extract beam-space statistics
-            features.extend([
-                np.mean(beam_mag, axis=(1, 2, 3)),  # Mean across spatial and frequency
-                np.std(beam_mag, axis=(1, 2, 3)),
-                np.max(beam_mag, axis=(1, 2, 3))
-            ])
-            feature_count += 3
-    
-    # Combine all features
-    features = np.column_stack(features)
-    
-    if normalize:
-        if verbose:
-            print("\nNormalizing features...")
-        features = (features - np.mean(features, axis=0)) / (np.std(features, axis=0) + 1e-10)
-    
-    if verbose:
-        print("\nFeature extraction completed!")
-        print(f"Final feature matrix shape: {features.shape}")
-        #print(f"New features added: {feature_count - original_features.shape[1]}")
-    
-    return features
-
-def extract_features_kmeans(H_data):
-    """
-    Extract features from channel data using KMeans clustering.
-
-    Args:
-        H_data: Complex channel data of shape (num_samples, ant_num, sc_num, port_num)
-
-    Returns:
-        Deep features extracted from the KMeans model.
-    """
-    try:
-        # Reshape H_data to fit the KMeans model
-        H_mag = np.abs(H_data)
-        reshaped_data = H_mag.reshape(H_mag.shape[0], -1)
-
-        # Create and train the KMeans model
-        kmeans_model = create_model(n_clusters=256)
-        train_model(kmeans_model, reshaped_data)
-
-        # Extract deep features
-        deep_features = get_deep_features(kmeans_model, reshaped_data)
-
-        return deep_features
-    except Exception as e:
-        print(f"An error occurred during KMeans feature extraction: {e}")
-        return None
 
 
 # This funcation calculates the positions of all channels, should be implemented by the participants
@@ -402,109 +35,208 @@ def calcLoc(
     ant_num,
     sc_num,
     kmeans_features=False,
-    method: str = "XGBoost",
+    method: str = "KNN",
     PathRaw="",
     Prefix="",
-    na=1
+    na = 1
 ):
     """
-    Enhanced implementation of channel-based localization using XGBoost with feature engineering
+    Basic implementation of channel-based localization using K-Nearest Neighbors
+
+    Args:
+        H: Complex channel data of shape (num_samples, ant_num, sc_num, port_num)
+        anch_pos: Anchor positions array with columns [index, x, y]
+        bs_pos: Base station position [x, y, z]
+        tol_samp_num: Total number of samples
+        anch_samp_num: Number of anchor samples
+        port_num: Number of UE ports
+        ant_num: Number of BS antennas
+        sc_num: Number of subcarriers
+
+    Returns:
+        Predicted positions array of shape (tol_samp_num, 2)
     """
+    # Create result array
+    loc_result = np.zeros([tol_samp_num, 2], "float")
 
-    print("Initializing enhanced localization process...")
-    from sklearn.model_selection import train_test_split
-    import xgboost as xgb
-    from sklearn.metrics import mean_squared_error
+    # Extract features from channel data
+    def extract_features(H_data):
+        return np.array(features)
 
-    # Feature extraction
-    def extract_features_combined(H_data):
-        """
-        Combines features from different extraction methods (v2, v3).
-        """
-        X_v2 = extract_features_v2(H_data, verbose=False)
-        X_v3 = extract_features_v3(H_data, verbose=False)
-        return np.column_stack((X_v2, X_v3))
+    
 
-    # Feature importance-based selection
-    def select_important_features(X, y, top_k=50):
-        model = xgb.XGBRegressor()
-        model.fit(X, y)
-        importance = model.feature_importances_
-        top_indices = np.argsort(importance)[-top_k:]
-        return X[:, top_indices]
+    def extract_features_v2(csi_data, normalize=True, verbose=True):
+        return features
 
-    # Step 1: Extract features from channel data
-    feature_file = PathRaw + "/" + Prefix + "Features" + f"{na}" + "_combined.npy"
+
+    def extract_features_v3(csi_data, normalize=True, verbose=True):
+        return features
+
+
+
+    def extract_features_kmeans(H_data):
+            return None
+
+    # Extract features from available channel data
+    print("Extracting features...")
+    
+
+    # If not third slice is used, extract additional features
+    # if int(na) != 3:
+    #     X_new = extract_features_v3(H) 
+    
+    
+    feature_file = PathRaw + "/" + Prefix + "FeaturesBetter" + f"{na}" + ".npy"
+    print(f"Saving/Retrieving features to/from {feature_file}")
+
+
     X = []
-    if Path(feature_file).exists():
+    my_file = Path(feature_file)
+
+    if my_file.exists():
         print("Loading features from file...")
         X = np.load(feature_file)
     else:
         print("Extracting features from channel data...")
-        X = extract_features_combined(H)
-        print(f"Saving features to {feature_file}")
-        np.save(feature_file, X)
+        X = extract_features_v4(H) if not kmeans_features else extract_features_kmeans(H)
+        print("Saving features to file...")
+        np.save(
+            feature_file, X
+        ) 
 
-    # Step 2: Prepare anchor data for training
+    # # If not third slice is used, extract additional features
+    # if int(na) != 3:
+    #     X = np.column_stack((X, X_new))
+
+    # return
+    X_scaled = X
+
+    # Prepare training data from anchor points that are within our current slice
     valid_anchors = []
     valid_positions = []
 
     for anchor in anch_pos:
         idx = int(anchor[0]) - 1  # Convert to 0-based index
-        if idx < len(H):  # Ensure anchor index is valid
+        if idx < len(H):  # Only use anchors that are in our current slice
             valid_anchors.append(idx)
-            valid_positions.append(anchor[1:])  # Extract x and y positions only
+            valid_positions.append(anchor[1:])
 
-    if len(valid_anchors) == 0:
-        raise ValueError("No valid anchors found for training. Check anchor data.")
+    if len(valid_anchors) > 0:
+        print(f"Training model with {len(valid_anchors)} anchor points...")
+        X_train = X_scaled[valid_anchors]
+        y_train = np.array(valid_positions)
+        if method == "Siamese":
+            input_dim = X_scaled.shape[1]
+            learning_rate = 0.0003
+            num_epochs = 1_000
+            dataset = SiameseDataset(X_scaled, valid_anchors, y_train)
+            dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
+            model = SiameseNetwork(input_dim)
+            model.to("cuda")
+            criterion = SiameseLoss()
+            optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+            for epoch in (pbar := tqdm(range(num_epochs))):
+                model.train()
+                total_loss = 0
+                for x1, x2, real_x1 in dataloader:
+                    optimizer.zero_grad()
 
-    X_train = X[valid_anchors]
-    y_train = np.array(valid_positions)
+                    z1, z2, _ = model(x1, x2)
+                    loss = criterion(x1, x2, z1, z2, real_x1)
+                    loss.backward()
 
-    print(f"X_train shape: {X_train.shape}, y_train shape: {y_train.shape}")
+                    optimizer.step()
+                    total_loss += loss.item()
+                pbar.set_description(
+                    f"Epoch {epoch + 1}/{num_epochs}, Loss: {total_loss / len(dataloader):.4f}"
+                )
 
-    # Validation step
-    if X_train.shape[0] != y_train.shape[0]:
-        raise ValueError(
-            f"Mismatch in training data sizes: X_train rows ({X_train.shape[0]}) vs y_train rows ({y_train.shape[0]})"
-        )
+            first = True
+            with torch.no_grad():
+                pairs = create_pairs(X_scaled)
+                predictions = []
+                for x1, x2 in pairs:
+                    x1_tensor = torch.tensor(x1, dtype=torch.float32).unsqueeze(0)
+                    x2_tensor = torch.tensor(x2, dtype=torch.float32).unsqueeze(0)
 
-    # Train-validation split
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_train, y_train, test_size=0.2, random_state=42
-    )
+                    z1, z2, output = model(x1_tensor.to("cuda"), x2_tensor.to("cuda"))
+                    predictions.append(z1.cpu().numpy())
 
-    print(f"Post-split shapes: X_train: {X_train.shape}, y_train: {y_train.shape}, "
-        f"X_val: {X_val.shape}, y_val: {y_val.shape}")
+                    if first:
+                        print(z1)
+                        first = False
+                    # print(z1)
 
-    # Proceed with XGBoost training
-    model = xgb.XGBRegressor(
-        n_estimators=600,
-        max_depth=7,
-        learning_rate=0.03,
-        subsample=0.8,
-        colsample_bytree=0.7,
-        random_state=42,
-    )
+                predictions = np.array(predictions)
+            torch.save(model.state_dict(), "siamese_model_state_dict.pth")
+        elif method == "XGBoost":
+            # xgb_model = xgb.XGBRegressor()
+            # reg_cv = GridSearchCV(xgb_model, {"colsample_bytree":[1.0],"min_child_weight":[1.0,1.2]
+            #                 ,'max_depth': [3,4,6], 'n_estimators': [50,100,200]}, verbose=2, n_jobs=-1)
+            # reg_cv.fit(X_train,y_train)
+            # print(reg_cv.best_params_)
+            xgb_model = xgb.XGBRegressor(n_estimators = 100, max_depth = 6, n_jobs=-1)
+            xgb_model.fit(X_train, y_train)
+            predictions = xgb_model.predict(X_scaled)
+        elif method == "RandomForest":
+            from sklearn.ensemble import RandomForestRegressor
+            rf = RandomForestRegressor(n_estimators=100, max_depth=7, random_state=42)
+            rf.fit(X_train, y_train)
+            predictions = rf.predict(X_scaled)
+        elif method == "MDS":
+            mds = MDS(n_components=2, dissimilarity="euclidean", random_state=42, n_jobs=-1, verbose=1)
+            predictions = mds.fit_transform(X_scaled)
+        elif method == "KNN":
+            # Train KNN model
+            knn = KNeighborsRegressor(
+                n_neighbors=min(5, len(valid_anchors)), weights="distance"
+            )
+            knn.fit(X_train, y_train)
 
-    model.fit(
-        X_train, y_train,
-        eval_set=[(X_val, y_val)],
-    )
+            # Predict positions for the current slice
+            predictions = knn.predict(X_scaled)
+        elif method == "skowi_test":
+            knn = KNeighborsRegressor(
+                n_neighbors=min(5, len(valid_anchors)), weights="uniform"
+            )
+            knn.fit(X_train, y_train)
 
-    # Step 5: Predict positions for all samples
-    print("Predicting locations for all samples...")
-    X_scaled = X  # Ensure consistent normalization across training and prediction
-    # X_scaled = select_important_features(X_scaled, y_train)  # Apply feature selection
-    y_pred = model.predict(X_scaled)
+            neigh = NearestNeighbors(n_neighbors=5)
+            neigh.fit(X_train)
+            
+            res = neigh.kneighbors([X_scaled[0]])
+            print("O WOW ")
+            print(res)
+            res = res[1]
+            print(y_train[res[0]])
 
-    # Step 6: Store predictions
-    loc_result = np.zeros([tol_samp_num, 2], "float")
-    loc_result[:, 0] = y_pred[:, 0]
-    loc_result[:, 1] = y_pred[:, 1]
-    print("Localization complete.")
+            plt.figure(figsize=(10, 6))
+            plt.scatter(y_train[res[0], 0], y_train[res[0], 1], label="K-Neigherst Neighbors")
+
+            predictions = np.zeros((len(X_scaled), 2))
+
+            predictions = knn.predict(X_scaled)
+
+            ground_truth = np.loadtxt("../dataset0/Dataset0GroundTruth1.txt")
+            plt.scatter(ground_truth[0, 0], ground_truth[0, 1], label="Ground Truth")
+
+            plt.scatter(predictions[0, 0], predictions[0, 1], label="Predictions")
+
+            plt.legend()
+            plt.show()
+
+            # plt.figure(figsize=(10, 6))
+            # plt.scatter(ground_truth[:, 0], ground_truth[:, 1], label="Ground Truth")
+
+        else:
+            raise ValueError(f"Invalid method: {method}")
+
+        # Fill the corresponding positions in the result array
+        for i in range(len(H)):
+            loc_result[i] = predictions[i]
 
     return loc_result
+
 
 def plot_distance_distribution(
     prediction_file: str, ground_truth_file: str, save_path: str = None
@@ -618,3 +350,93 @@ def create_pairs(X_scaled):
         j = np.random.choice([x for x in range(num_samples) if x != i])
         pairs.append((X_scaled[i], X_scaled[j]))  # Create a pair of (x1, x2)
     return pairs
+
+
+
+def extract_features_v4(csi_data, normalize=True, verbose=True):
+
+    n_samples, n_ue_ant, n_bs_ant, n_subcarriers = csi_data.shape
+
+    # Step 1: Compute Frobenius norm for each sample (20000 samples)
+    fro_norms = np.sqrt(np.sum(np.abs(csi_data)**2, axis=(1, 2, 3)))  # Shape: (20000,)
+
+
+    # Step 2: Normalize each sample
+    # Broadcasting fro_norms to match csi_data shape for division
+    csi_data = csi_data / fro_norms[:, np.newaxis, np.newaxis, np.newaxis]
+    
+    del fro_norms
+
+    # Step 3: Scale to desired factor
+    scaling_factor = np.sqrt(n_ue_ant * n_bs_ant)
+    csi_data = csi_data * scaling_factor
+
+    beamspace_magnitudes = []
+    batch_size = 1000
+    # Process in batches to reduce memory usage
+    for start_idx in tqdm(range(0, csi_data.shape[0], batch_size)):
+        end_idx = min(start_idx + batch_size, csi_data.shape[0])
+        
+        batch = csi_data[start_idx:end_idx]
+        
+        # Step 1: Apply 2D Fourier Transform across UE and BS antennas
+        beamspace_batch = np.fft.fft2(batch, axes=(1, 2))
+        
+        # Step 2: Normalize Beamspace Data (Optional)
+        beamspace_batch /= np.sqrt(batch.shape[1] * batch.shape[2])  # Normalize by number of antennas
+        
+        test = np.abs(beamspace_batch)
+        print(test.shape)
+        # Store the results in the output array
+        beamspace_magnitudes.append(test)
+
+    beamspace_magnitudes = np.concatenate(beamspace_magnitudes, axis=0)
+
+    return beamspace_magnitudes.reshape(n_samples, -1)
+    
+def process_csi_data(csi_data):
+    """
+    Transform CSI data from frequency to delay domain, take absolute values, and normalize.
+    
+    Parameters:
+    -----------
+    csi_data : numpy.ndarray
+        CSI data of shape (n_samples, n_ue_antennas, n_bs_antennas, n_subcarriers)
+    
+    Returns:
+    --------
+    numpy.ndarray
+        Processed CSI data with the same shape
+    """
+    # Get the shape of input data
+    n_samples, n_ue_ant, n_bs_ant, n_subcarriers = csi_data.shape
+    
+    # Initialize output array
+    processed_data = np.zeros_like(csi_data, dtype=np.float32)
+
+    print("Processing CSI data...")
+    
+    # Process each sample
+    for i in tqdm(range(n_samples)):
+        for j in range(n_ue_ant):
+            for k in range(n_bs_ant):
+                # Get frequency domain data for current antenna pair
+                freq_data = csi_data[i, j, k, :]
+                
+                # Transform to delay domain using IFFT
+                delay_data = np.fft.ifft(freq_data)
+                
+                # Calculate absolute values
+                abs_data = np.abs(delay_data)
+                
+                # Normalize to unit norm
+                norm = np.linalg.norm(abs_data)
+                if norm > 0:  # Avoid division by zero
+                    normalized_data = abs_data / norm
+                else:
+                    normalized_data = abs_data
+                
+                # Store the result
+                processed_data[i, j, k, :] = normalized_data
+    
+    return processed_data.reshape(n_samples, -1)

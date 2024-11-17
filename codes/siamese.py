@@ -39,13 +39,15 @@ class SiameseDataset(Dataset):
             )  # Negative pair
 
         x2 = self.X[self.valid_anchors[j]]
-        d_ij = np.linalg.norm(
-            self.valid_positions[idx] - self.valid_positions[j]
-        )  # Euclidean distance
+
+        real_x1 = self.valid_positions[idx]
+        # d_ij = np.linalg.norm(
+        #     self.valid_positions[idx] - self.valid_positions[j]
+        # )  # Euclidean distance
         return (
             torch.tensor(x1, dtype=torch.float32).to(self.device),
             torch.tensor(x2, dtype=torch.float32).to(self.device),
-            torch.tensor(d_ij, dtype=torch.float32).to(self.device),
+            torch.tensor(real_x1, dtype=torch.float32).to(self.device),
         )
 
 
@@ -59,15 +61,21 @@ class SiameseNetworkBase(nn.Module):
             dropout_rate: Dropout rate for regularization
         """
         super(SiameseNetworkBase, self).__init__()
-        self.fc1 = nn.Linear(input_dim, 1024)
-        self.fc2 = nn.Linear(1024, 512)
-        self.fc3 = nn.Linear(512, embedding_dim)
+        self.fc1 = nn.Linear(input_dim, 512)
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256, 128)
+        self.fc4 = nn.Linear(128, 64)
+        self.fc5 = nn.Linear(64, 32)
+        self.fc6 = nn.Linear(32, embedding_dim)
         self.dropout = nn.Dropout(0.5)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = self.dropout(F.relu(self.fc2(x)))
-        x = self.fc3(x)
+        x = self.dropout(F.relu(self.fc3(x)))
+        x = self.dropout(F.relu(self.fc4(x)))
+        x = self.dropout(F.relu(self.fc5(x)))
+        x = self.fc6(x)
         return x
 
 
@@ -96,14 +104,30 @@ class SiameseLoss(nn.Module):
         super(SiameseLoss, self).__init__()
         self.margin = margin
 
-    def forward(self, z1, z2, d_ij):
+    def forward(self, x1, x2, y1, y2, yp1):
         """
         Compute the Siamese loss based on Euclidean distances.
         Args:
             z1, z2: Embeddings of the input pairs
             d_ij: Ground truth distance between pairs
         """
-        distance = torch.sqrt(torch.sum((z1 - z2) ** 2, dim=1) + 1e-6)
-        loss = torch.mean((d_ij - distance) ** 2)
-        margin_loss = torch.clamp(self.margin - distance, min=0)
-        return loss + torch.mean(margin_loss)
+        distance_x = torch.sqrt(torch.sum((x1 - x2) ** 2, dim=1) + 1e-6)
+        distance_y = torch.sqrt(torch.sum((y1 - y2) ** 2, dim=1) + 1e-6)
+
+        param = 1
+        if(not torch.equal(x1,x2)):
+            param = distance_x
+
+        loss = torch.mean(((distance_x - distance_y) ** 2) / param)
+
+        distance_gt = torch.sum((y1 - yp1) ** 2, dim=1) 
+        loss_gt = torch.mean(distance_gt)
+        
+        # print(loss, loss_gt)
+
+        return loss + loss_gt
+    
+        # distance = torch.sqrt(torch.sum((z1 - z2) ** 2, dim=1) + 1e-6)
+        # loss = torch.mean((d_ij - distance) ** 2)
+        # margin_loss = torch.clamp(self.margin - distance, min=0)
+        # return loss + torch.mean(margin_loss)
