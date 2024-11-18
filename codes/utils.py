@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 Current_Best_Sum_Score = [1059861.98, 1476891.76, 1658852.85]
-Current_Best_Mean_Score = [10.78, 14.07, 38.88]
+Current_Best_Mean_Score = [10.78, 14.07, 34.43]
 
 
 def extract_features(csi_data, normalize=True, verbose=True):
