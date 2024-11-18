@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 Current_Best_Sum_Score = [1059861.98, 1476891.76, 1658852.85]
-Current_Best_Mean_Score = [21.39, 48.17, 68.93]
+Current_Best_Mean_Score = [10.78, 14.07, 38.88]
 
 
 
@@ -128,7 +128,7 @@ def calcLoc(
         if method == "Siamese":
             input_dim = X_scaled.shape[1]
             learning_rate = 0.0003
-            num_epochs = 1_000
+            num_epochs = 200
             dataset = SiameseDataset(X_scaled, valid_anchors, y_train)
             dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
             model = SiameseNetwork(input_dim)

@@ -71,10 +71,10 @@ class SiameseNetworkBase(nn.Module):
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
-        x = self.dropout(F.relu(self.fc2(x)))
-        x = self.dropout(F.relu(self.fc3(x)))
-        x = self.dropout(F.relu(self.fc4(x)))
-        x = self.dropout(F.relu(self.fc5(x)))
+        x = F.relu(self.fc2(x))
+        x = F.relu(self.fc3(x))
+        x = F.relu(self.fc4(x))
+        x = F.relu(self.fc5(x))
         x = self.fc6(x)
         return x
 
@@ -108,8 +108,9 @@ class SiameseLoss(nn.Module):
         """
         Compute the Siamese loss based on Euclidean distances.
         Args:
-            z1, z2: Embeddings of the input pairs
-            d_ij: Ground truth distance between pairs
+            x1, x2: Higher dimensional input features
+            y1, y2: Low Dimension results of model from input features
+            yp1: Ground truth for x1
         """
         distance_x = torch.sqrt(torch.sum((x1 - x2) ** 2, dim=1) + 1e-6)
         distance_y = torch.sqrt(torch.sum((y1 - y2) ** 2, dim=1) + 1e-6)
@@ -118,10 +119,10 @@ class SiameseLoss(nn.Module):
         if(not torch.equal(x1,x2)):
             param = distance_x
 
-        loss = torch.mean(((distance_x - distance_y) ** 2) / param)
+        loss = torch.sum(((distance_x - distance_y) ** 2) / param)
 
         distance_gt = torch.sum((y1 - yp1) ** 2, dim=1) 
-        loss_gt = torch.mean(distance_gt)
+        loss_gt = torch.sum(distance_gt)
         
         # print(loss, loss_gt)
 
