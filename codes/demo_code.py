@@ -3,9 +3,11 @@ import time
 from pathlib import Path
 
 import numpy as np
-from input_handling import read_anch_file, read_cfg_file, read_slice_of_file
 from sklearn.manifold import MDS
-from utils import calcLoc, evaluate_score, plot_distance_distribution, plot_scatter_GroundTruth, plot_predictions_vs_truth
+
+from input_handling import read_anch_file, read_cfg_file, read_slice_of_file
+from utils import (calcLoc, evaluate_score, plot_distance_distribution,
+                   plot_predictions_vs_truth, plot_scatter_GroundTruth)
 
 if __name__ == "__main__":
     print("<<< Welcome to 2024 Wireless Algorithm Contest! >>>\n")
@@ -30,7 +32,6 @@ if __name__ == "__main__":
         if f.find("CfgData") != -1 and f.endswith(".txt"):
             print(f)
             names.append(f.split("CfgData")[-1].split(".txt")[0])
-
 
     # plot_scatter_GroundTruth(os.path.join(PathRaw,f"Dataset0GroundTruth1.txt"), os.path.join(PathRaw,f"Dataset0GroundTruth2.txt"), os.path.join(PathRaw,f"Dataset0GroundTruth3.txt") )
 
@@ -106,7 +107,6 @@ if __name__ == "__main__":
             PathRaw=PathRaw,
             Prefix=Prefix,
             na=na,
-
         )  # This function should be implemented by yourself
 
         # Replace the position information for anchor points with ground true coordinates
@@ -135,4 +135,3 @@ if __name__ == "__main__":
             )
             # plot_predictions_vs_truth(output_path, ground_truth_path)
             print(f"\nVisualization saved to: {plot_path}")
-

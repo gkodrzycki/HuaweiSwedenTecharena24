@@ -1,22 +1,22 @@
+from itertools import combinations
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import xgboost as xgb
-from kmeans import create_model, get_deep_features, train_model
-from siamese import SiameseDataset, SiameseLoss, SiameseNetwork
+from scipy import signal
+from scipy.fft import fft, fftshift
+from scipy.stats import kurtosis, skew
 from sklearn.manifold import MDS
+from sklearn.model_selection import GridSearchCV
 from sklearn.neighbors import KNeighborsRegressor, NearestNeighbors
 from sklearn.preprocessing import StandardScaler
-from scipy import signal
-from scipy.stats import kurtosis, skew
-from scipy.fft import fft, fftshift
-from itertools import combinations
-from pathlib import Path
-from sklearn.model_selection import GridSearchCV
-
-
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+
+from kmeans import create_model, get_deep_features, train_model
+from siamese import SiameseDataset, SiameseLoss, SiameseNetwork
 
 Current_Best_Sum_Score = [1059861.98, 1476891.76, 1658852.85]
 Current_Best_Mean_Score = [10.78, 14.07, 34.43]
@@ -27,13 +27,14 @@ def extract_features(csi_data, normalize=True, verbose=True):
     n_samples, n_ue_ant, n_bs_ant, n_subcarriers = csi_data.shape
 
     # Step 1: Compute Frobenius norm for each sample (20000 samples)
-    fro_norms = np.sqrt(np.sum(np.abs(csi_data)**2, axis=(1, 2, 3)))  # Shape: (20000,)
-
+    fro_norms = np.sqrt(
+        np.sum(np.abs(csi_data) ** 2, axis=(1, 2, 3))
+    )  # Shape: (20000,)
 
     # Step 2: Normalize each sample
     # Broadcasting fro_norms to match csi_data shape for division
     csi_data = csi_data / fro_norms[:, np.newaxis, np.newaxis, np.newaxis]
-    
+
     del fro_norms
 
     # Step 3: Scale to desired factor
@@ -45,15 +46,17 @@ def extract_features(csi_data, normalize=True, verbose=True):
     # Process in batches to reduce memory usage
     for start_idx in tqdm(range(0, csi_data.shape[0], batch_size)):
         end_idx = min(start_idx + batch_size, csi_data.shape[0])
-        
+
         batch = csi_data[start_idx:end_idx]
-        
+
         # Step 1: Apply 2D Fourier Transform across UE and BS antennas
         beamspace_batch = np.fft.fft2(batch, axes=(1, 2))
-        
+
         # Step 2: Normalize Beamspace Data (Optional)
-        beamspace_batch /= np.sqrt(batch.shape[1] * batch.shape[2])  # Normalize by number of antennas
-        
+        beamspace_batch /= np.sqrt(
+            batch.shape[1] * batch.shape[2]
+        )  # Normalize by number of antennas
+
         test = np.abs(beamspace_batch)
         print(test.shape)
         # Store the results in the output array
@@ -62,6 +65,7 @@ def extract_features(csi_data, normalize=True, verbose=True):
     beamspace_magnitudes = np.concatenate(beamspace_magnitudes, axis=0)
 
     return beamspace_magnitudes.reshape(n_samples, -1)
+
 
 # This funcation calculates the positions of all channels, should be implemented by the participants
 def calcLoc(
@@ -77,7 +81,7 @@ def calcLoc(
     method: str = "KNN",
     PathRaw="",
     Prefix="",
-    na = 1
+    na=1,
 ):
     """
     Basic implementation of channel-based localization using K-Nearest Neighbors
@@ -101,7 +105,6 @@ def calcLoc(
     feature_file = PathRaw + "/" + Prefix + "FeaturesBetter" + f"{na}" + ".npy"
     print(f"Saving/Retrieving features to/from {feature_file}")
 
-
     X = []
     my_file = Path(feature_file)
 
@@ -112,9 +115,7 @@ def calcLoc(
         print("Extracting features from channel data...")
         X = extract_features(H)
         print("Saving features to file...")
-        np.save(
-            feature_file, X
-        ) 
+        np.save(feature_file, X)
 
     # Prepare training data from anchor points that are within our current slice
     valid_anchors = []
@@ -178,7 +179,7 @@ def calcLoc(
             torch.save(model.state_dict(), "siamese_model_state_dict.pth")
         elif method == "XGBoost":
 
-            xgb_model = xgb.XGBRegressor(n_estimators = 100, max_depth = 6, n_jobs=-1)
+            xgb_model = xgb.XGBRegressor(n_estimators=100, max_depth=6, n_jobs=-1)
             xgb_model.fit(X_train, y_train)
             predictions = xgb_model.predict(X)
 
@@ -239,7 +240,10 @@ def plot_distance_distribution(
     else:
         plt.show()
 
-def plot_scatter_GroundTruth(ground_truth_file0, ground_truth_file1, ground_truth_file2):
+
+def plot_scatter_GroundTruth(
+    ground_truth_file0, ground_truth_file1, ground_truth_file2
+):
     """
     Plot scatter points
     """
@@ -252,11 +256,12 @@ def plot_scatter_GroundTruth(ground_truth_file0, ground_truth_file1, ground_trut
     plt.scatter(ground_truth[:, 0], ground_truth[:, 1], label="Ground Truth")
     plt.show()
 
+
 def plot_predictions_vs_truth(predictions, ground_truth):
     """
     Plot scatter points for predicted and ground truth positions
     """
-    predictions =   np.loadtxt(predictions)
+    predictions = np.loadtxt(predictions)
     ground_truth = np.loadtxt(ground_truth)
 
     predictions = predictions[:2]
@@ -266,7 +271,8 @@ def plot_predictions_vs_truth(predictions, ground_truth):
     plt.scatter(predictions[:, 0], predictions[:, 1], label="Predictions")
     plt.legend()
     plt.show()
-    
+
+
 def evaluate_score(
     prediction_file: str, ground_truth_file: str, dataset_ind: str
 ) -> float:

@@ -111,15 +111,12 @@ class SiameseLoss(nn.Module):
         param_w = torch.ones(x1.shape[0]).to(x1.device)
 
         for i in range(x1.shape[0]):
-            if(not torch.equal(x1[i],x2[i])):
+            if not torch.equal(x1[i], x2[i]):
                 param_w[i] = distance_x[i]
-        
 
         loss = torch.sum(((distance_x - distance_y) ** 2) / param_w)
 
-        distance_gt = torch.sum((y1 - yp1) ** 2, dim=1) 
+        distance_gt = torch.sum((y1 - yp1) ** 2, dim=1)
         loss_gt = torch.sum(distance_gt)
-        
 
         return loss + loss_gt
-    
