@@ -1,24 +1,14 @@
-from itertools import combinations
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import xgboost as xgb
-from scipy import signal
-from scipy.fft import fft, fftshift
-from scipy.stats import kurtosis, skew
-from sklearn.manifold import MDS
-from sklearn.model_selection import GridSearchCV
-from sklearn.neighbors import KNeighborsRegressor, NearestNeighbors
-from sklearn.preprocessing import StandardScaler
+from siamese import SiameseDataset, SiameseLoss, SiameseNetwork
+from sklearn.neighbors import KNeighborsRegressor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from kmeans import create_model, get_deep_features, train_model
-from siamese import SiameseDataset, SiameseLoss, SiameseNetwork
-
-Current_Best_Sum_Score = [1059861.98, 1476891.76, 1658852.85]
 Current_Best_Mean_Score = [10.78, 14.07, 34.43]
 
 
@@ -27,9 +17,7 @@ def extract_features(csi_data, normalize=True, verbose=True):
     n_samples, n_ue_ant, n_bs_ant, n_subcarriers = csi_data.shape
 
     # Step 1: Compute Frobenius norm for each sample (20000 samples)
-    fro_norms = np.sqrt(
-        np.sum(np.abs(csi_data) ** 2, axis=(1, 2, 3))
-    )  # Shape: (20000,)
+    fro_norms = np.sqrt(np.sum(np.abs(csi_data) ** 2, axis=(1, 2, 3)))  # Shape: (20000,)
 
     # Step 2: Normalize each sample
     # Broadcasting fro_norms to match csi_data shape for division
@@ -53,9 +41,7 @@ def extract_features(csi_data, normalize=True, verbose=True):
         beamspace_batch = np.fft.fft2(batch, axes=(1, 2))
 
         # Step 2: Normalize Beamspace Data (Optional)
-        beamspace_batch /= np.sqrt(
-            batch.shape[1] * batch.shape[2]
-        )  # Normalize by number of antennas
+        beamspace_batch /= np.sqrt(batch.shape[1] * batch.shape[2])  # Normalize by number of antennas
 
         test = np.abs(beamspace_batch)
         print(test.shape)
@@ -103,18 +89,17 @@ def calcLoc(
     loc_result = np.zeros([tol_samp_num, 2], "float")
 
     feature_file = PathRaw + "/" + Prefix + "FeaturesBetter" + f"{na}" + ".npy"
-    print(f"Saving/Retrieving features to/from {feature_file}")
 
     X = []
     my_file = Path(feature_file)
 
     if my_file.exists():
-        print("Loading features from file...")
+        print(f"Retrieving features from {feature_file}")
         X = np.load(feature_file)
     else:
         print("Extracting features from channel data...")
         X = extract_features(H)
-        print("Saving features to file...")
+        print(f"Saving features to file {feature_file}")
         np.save(feature_file, X)
 
     # Prepare training data from anchor points that are within our current slice
@@ -136,11 +121,12 @@ def calcLoc(
             # Initialize Siamese Network
             input_dim = X.shape[1]
             learning_rate = 0.0003
-            num_epochs = 200
-            dataset = SiameseDataset(X, valid_anchors, y_train)
+            num_epochs = 1
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            dataset = SiameseDataset(X, valid_anchors, y_train, device=device)
             dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
             model = SiameseNetwork(input_dim)
-            model.to("cuda")
+            model.to(device)
             criterion = SiameseLoss()
             optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -157,18 +143,16 @@ def calcLoc(
 
                     optimizer.step()
                     total_loss += loss.item()
-                pbar.set_description(
-                    f"Epoch {epoch + 1}/{num_epochs}, Loss: {total_loss / len(dataloader):.4f}"
-                )
+                pbar.set_description(f"Epoch {epoch + 1}/{num_epochs}, Loss: {total_loss / len(dataloader):.4f}")
 
             # Calculate predictions
             first = True
             with torch.no_grad():
 
                 predictions = []
-                for x1 in X:
+                for x1 in tqdm(X):
                     x1_tensor = torch.tensor(x1, dtype=torch.float32).unsqueeze(0)
-                    z1, _ = model(x1_tensor.to("cuda"), x1_tensor.to("cuda"))
+                    z1, _ = model(x1_tensor.to(device), x1_tensor.to(device))
                     predictions.append(z1.cpu().numpy())
 
                     if first:
@@ -185,9 +169,7 @@ def calcLoc(
 
         elif method == "KNN":
             # Train KNN model
-            knn = KNeighborsRegressor(
-                n_neighbors=min(5, len(valid_anchors)), weights="distance"
-            )
+            knn = KNeighborsRegressor(n_neighbors=min(5, len(valid_anchors)), weights="distance")
             knn.fit(X_train, y_train)
 
             # Predict positions for the current slice
@@ -203,9 +185,7 @@ def calcLoc(
     return loc_result
 
 
-def plot_distance_distribution(
-    prediction_file: str, ground_truth_file: str, save_path: str = None
-):
+def plot_distance_distribution(prediction_file: str, ground_truth_file: str, save_path: str = None):
     """
     Args:
         prediction_file: Path to the file containing predicted positions
@@ -241,9 +221,7 @@ def plot_distance_distribution(
         plt.show()
 
 
-def plot_scatter_GroundTruth(
-    ground_truth_file0, ground_truth_file1, ground_truth_file2
-):
+def plot_scatter_GroundTruth(ground_truth_file0, ground_truth_file1, ground_truth_file2):
     """
     Plot scatter points
     """
@@ -273,9 +251,7 @@ def plot_predictions_vs_truth(predictions, ground_truth):
     plt.show()
 
 
-def evaluate_score(
-    prediction_file: str, ground_truth_file: str, dataset_ind: str
-) -> float:
+def evaluate_score(prediction_file: str, ground_truth_file: str, dataset_ind: str) -> float:
     """
     Calculate score as sum of Euclidean distances between predicted and ground truth points.
 

@@ -34,9 +34,7 @@ class SiameseDataset(Dataset):
         if np.random.rand() > 0.5:  # 50% chance for positive or negative pair
             j = idx  # Positive pair (self-comparison)
         else:
-            j = np.random.choice(
-                [k for k in range(len(self.valid_anchors)) if k != idx]
-            )  # Negative pair
+            j = np.random.choice([k for k in range(len(self.valid_anchors)) if k != idx])  # Negative pair
 
         x2 = self.X[self.valid_anchors[j]]
 
