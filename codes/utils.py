@@ -4,10 +4,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import xgboost as xgb
+from data.generation import generate_new_samples, train_gan_model
 from siamese import SiameseDataset, SiameseLoss, SiameseNetwork
 from sklearn.neighbors import KNeighborsRegressor
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
+
+from codes.data.gan_dataset import GAN_Dataset
 
 Current_Best_Mean_Score = [10.78, 14.07, 34.43]
 
@@ -68,6 +71,7 @@ def calcLoc(
     PathRaw="",
     Prefix="",
     na=1,
+    generate_new=False,
 ):
     """
     Basic implementation of channel-based localization using K-Nearest Neighbors
@@ -116,6 +120,21 @@ def calcLoc(
         print(f"Training model with {len(valid_anchors)} anchor points...")
         X_train = X[valid_anchors]
         y_train = np.array(valid_positions)
+        if generate_new:
+            # config for GAN training and generation
+            latent_dim: int = X_train.shape[1]
+            input_dim: int = 512
+            lr: float = 0.0002
+            epochs: int = 10_000
+            device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            batch_size: int = 64
+            num_samples: int = 2 * len(valid_anchors)
+
+            dataset: torch.utils.data.Dataset = GAN_Dataset(X_train)
+            dataloader: torch.utils.data.DataLoader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+            generator = train_gan_model(dataloader, input_dim, latent_dim, lr, epochs, device)
+            new_samples = generate_new_samples(generator, latent_dim, num_samples, device)
+            X_train = np.concatenate((X_train, new_samples), axis=0)
 
         if method == "Siamese":
             # Initialize Siamese Network
