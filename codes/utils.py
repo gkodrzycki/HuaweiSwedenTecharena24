@@ -5,14 +5,13 @@ import numpy as np
 import torch
 import xgboost as xgb
 from siamese import SiameseDataset, SiameseLoss, SiameseNetwork
-from sklearn.neighbors import KNeighborsRegressor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 Current_Best_Mean_Score = [10.78, 14.07, 34.43]
 
 
-def extract_features(csi_data, normalize=True, verbose=True):
+def extract_features(csi_data):
 
     n_samples, n_ue_ant, n_bs_ant, n_subcarriers = csi_data.shape
 
@@ -63,8 +62,7 @@ def calcLoc(
     port_num,
     ant_num,
     sc_num,
-    kmeans_features=False,
-    method: str = "KNN",
+    method: str = "Siamese",
     PathRaw="",
     Prefix="",
     na=1,
@@ -81,6 +79,10 @@ def calcLoc(
         port_num: Number of UE ports
         ant_num: Number of BS antennas
         sc_num: Number of subcarriers
+        method: Method which we want to use for generating results
+        PathRaw: Path to file we want to use
+        Prefix: Prefix choosing which dataset we want to use
+        na: Number of file (in our case 1-3)
 
     Returns:
         Predicted positions array of shape (tol_samp_num, 2)
@@ -148,7 +150,6 @@ def calcLoc(
             # Calculate predictions
             first = True
             with torch.no_grad():
-
                 predictions = []
                 for x1 in tqdm(X):
                     x1_tensor = torch.tensor(x1, dtype=torch.float32).unsqueeze(0)
@@ -162,19 +163,9 @@ def calcLoc(
                 predictions = np.array(predictions)
             torch.save(model.state_dict(), "siamese_model_state_dict.pth")
         elif method == "XGBoost":
-
             xgb_model = xgb.XGBRegressor(n_estimators=100, max_depth=6, n_jobs=-1)
             xgb_model.fit(X_train, y_train)
             predictions = xgb_model.predict(X)
-
-        elif method == "KNN":
-            # Train KNN model
-            knn = KNeighborsRegressor(n_neighbors=min(5, len(valid_anchors)), weights="distance")
-            knn.fit(X_train, y_train)
-
-            # Predict positions for the current slice
-            predictions = knn.predict(X)
-
         else:
             raise ValueError(f"Invalid method: {method}")
 

@@ -68,7 +68,7 @@ if __name__ == "__main__":
             H = []
             for slice_idx in range(
                 slice_num
-            ):  # range(slice_num): # Read in channel data in a loop. In each loop, only one slice of channel is read in
+            ):  # Read in channel data in a loop. In each loop, only one slice of channel is read in
                 print("Loading input CSI data of slice " + str(slice_idx))
                 slice_lines = read_slice_of_file(
                     csi_path,
@@ -102,7 +102,6 @@ if __name__ == "__main__":
             port_num,
             ant_num,
             sc_num,
-            kmeans_features=False,
             method="Siamese",
             PathRaw=PathRaw,
             Prefix=Prefix,
