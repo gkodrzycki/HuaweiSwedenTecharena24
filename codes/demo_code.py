@@ -5,7 +5,13 @@ from pathlib import Path
 import numpy as np
 from input_handling import read_anch_file, read_cfg_file, read_slice_of_file
 from sklearn.manifold import MDS
-from utils import calcLoc, evaluate_score, plot_distance_distribution, plot_scatter_GroundTruth, plot_predictions_vs_truth
+from utils import (
+    calcLoc,
+    evaluate_score,
+    plot_distance_distribution,
+    plot_predictions_vs_truth,
+    plot_scatter_GroundTruth,
+)
 
 if __name__ == "__main__":
     print("<<< Welcome to 2024 Wireless Algorithm Contest! >>>\n")
@@ -18,7 +24,7 @@ if __name__ == "__main__":
     }
     PrefixSet = {0: "Dataset0", 1: "Dataset1", 2: "Dataset2", 3: "Round3"}
 
-    Ridx = 1  # Flag defining the round of the competition, used for define where to read data。0:Test; 1: 1st round; 2: 2nd round ...
+    Ridx = 0  # Flag defining the round of the competition, used for define where to read data。0:Test; 1: 1st round; 2: 2nd round ...
     PathRaw = PathSet[Ridx]
     Prefix = PrefixSet[Ridx]
 
@@ -31,7 +37,6 @@ if __name__ == "__main__":
             print(f)
             names.append(f.split("CfgData")[-1].split(".txt")[0])
 
-
     # plot_scatter_GroundTruth(os.path.join(PathRaw,f"Dataset0GroundTruth1.txt"), os.path.join(PathRaw,f"Dataset0GroundTruth2.txt"), os.path.join(PathRaw,f"Dataset0GroundTruth3.txt") )
 
     for na in names:
@@ -41,9 +46,7 @@ if __name__ == "__main__":
         # Read in the configureation file: RoundYCfgDataX.txt
         print("Loading configuration data file")
         cfg_path = PathRaw + "/" + Prefix + "CfgData" + na + ".txt"
-        bs_pos, tol_samp_num, anch_samp_num, port_num, ant_num, sc_num = read_cfg_file(
-            cfg_path
-        )
+        bs_pos, tol_samp_num, anch_samp_num, port_num, ant_num, sc_num = read_cfg_file(cfg_path)
 
         # Read in info related to the anchor points: RoundYInputPosX.txt
         print("Loading input position file")
@@ -59,9 +62,7 @@ if __name__ == "__main__":
         my_file = Path(csi_file)
 
         if my_file.exists():
-            H = np.load(
-                csi_file
-            )  # if saved in npy, you can load npy file instead of txt
+            H = np.load(csi_file)  # if saved in npy, you can load npy file instead of txt
         else:
             print(slice_num)
             H = []
@@ -102,11 +103,10 @@ if __name__ == "__main__":
             ant_num,
             sc_num,
             kmeans_features=False,
-            method="XGBoost",
+            method="Siamese",
             PathRaw=PathRaw,
             Prefix=Prefix,
             na=na,
-
         )  # This function should be implemented by yourself
 
         # Replace the position information for anchor points with ground true coordinates
@@ -130,9 +130,6 @@ if __name__ == "__main__":
             score = evaluate_score(output_path, ground_truth_path, int(na))
 
             plot_path = os.path.join(PathRaw, f"Dataset{Ridx}ErrorDist{na}.png")
-            plot_distance_distribution(
-                output_path, ground_truth_path, save_path=plot_path
-            )
+            plot_distance_distribution(output_path, ground_truth_path, save_path=plot_path)
             # plot_predictions_vs_truth(output_path, ground_truth_path)
             print(f"\nVisualization saved to: {plot_path}")
-
