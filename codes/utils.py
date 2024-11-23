@@ -141,7 +141,7 @@ def calcLoc(
             input_dim = X.shape[1]
             learning_rate = 0.0003
             num_epochs = 1
-            device = "cuda" if torch.cuda.is_available() else "cpu"
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             dataset = SiameseDataset(X, valid_anchors, y_train, device=device)
             dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
             model = SiameseNetwork(input_dim)
