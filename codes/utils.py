@@ -35,6 +35,15 @@ def extract_features(csi_data):
         end_idx = min(start_idx + batch_size, csi_data.shape[0])
 
         batch = csi_data[start_idx:end_idx]
+        
+        avg_param = 10
+        N = np.sqrt(0.5) * np.array((np.random.randn(n_bs_ant,avg_param),1j*np.random.randn(n_bs_ant,avg_param)))
+        HN = batch + N
+        Hmean = np.mean(HN, axis=1)
+            
+        # feature scaling
+        sigma = 16
+        batch = (n_bs_ant^(1/(2*sigma))/np.norm(Hmean,2)^(1+1/(2*sigma)))
 
         # Step 1: Apply 2D Fourier Transform across UE and BS antennas
         beamspace_batch = np.fft.fft2(batch, axes=(1, 2))
