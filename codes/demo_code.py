@@ -24,7 +24,7 @@ if __name__ == "__main__":
     }
     PrefixSet = {0: "Dataset0", 1: "Dataset1", 2: "Dataset2", 3: "Round3"}
 
-    Ridx = 0  # Flag defining the round of the competition, used for define where to read data。0:Test; 1: 1st round; 2: 2nd round ...
+    Ridx = 2  # Flag defining the round of the competition, used for define where to read data。0:Test; 1: 1st round; 2: 2nd round ...
     PathRaw = PathSet[Ridx]
     Prefix = PrefixSet[Ridx]
 
