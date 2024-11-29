@@ -38,7 +38,7 @@ if __name__ == "__main__":
             names.append(f.split("CfgData")[-1].split(".txt")[0])
 
     # plot_scatter_GroundTruth(os.path.join(PathRaw,f"Dataset0GroundTruth1.txt"), os.path.join(PathRaw,f"Dataset0GroundTruth2.txt"), os.path.join(PathRaw,f"Dataset0GroundTruth3.txt") )
-
+    # names = ["3"]
     for na in names:
         FileIdx = int(na)
         print("Processing Round " + str(Ridx) + " Case " + str(na))
