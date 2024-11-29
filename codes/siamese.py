@@ -38,6 +38,10 @@ class SiameseDataset(Dataset):
 
         x2 = self.X[self.valid_anchors[j]]
 
+        B = 64
+        N = np.sqrt(0.5) * (np.random.randn(x1.shape[0]))
+        x1 += N
+
         real_y1 = self.valid_positions[idx]
 
         return (
