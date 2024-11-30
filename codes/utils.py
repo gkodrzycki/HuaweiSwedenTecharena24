@@ -21,7 +21,7 @@ def extract_features_train_data(csi_data, train_positions):
 
     n_samples, n_ue_ant, n_bs_ant, n_subcarriers = csi_data.shape
 
-    augmentation_size = 0
+    augmentation_size = 4
 
     augmented_csi_data = []
     augmented_train_positions = []
@@ -49,9 +49,9 @@ def extract_features_train_data(csi_data, train_positions):
     csi_indexes = np.arange(0, train_positions.shape[0], 1)
     if augmentation_size > 0:
         
-        csi_data = np.concatenate((csi_data, np.array(augmented_csi_data)))
+        csi_data = np.array(augmented_csi_data)
         print("csi_data: ", csi_data.shape)
-        train_positions = np.concatenate((train_positions, np.array(augmented_train_positions)))
+        train_positions = np.array(augmented_train_positions)
         print("train_positions: ", train_positions.shape)
         csi_indexes = np.arange(0, train_positions.shape[0], 1)
         print("csi_indexes: ", csi_indexes.shape)
@@ -232,9 +232,9 @@ def calcLoc(
     y_train = np.array(valid_positions)
     
 
-    feature_file_x = PathRaw + "/" + Prefix + "FeaturesBetterTraining" + f"{na}" + "x.npy"
-    feature_file_a = PathRaw + "/" + Prefix + "FeaturesBetterTraining" + f"{na}" + "a.npy"
-    feature_file_t = PathRaw + "/" + Prefix + "FeaturesBetterTraining" + f"{na}" + "t.npy"
+    feature_file_x = PathRaw + "/" + Prefix + "FeaturesBetterTrainingNoise" + f"{na}" + "x.npy"
+    feature_file_a = PathRaw + "/" + Prefix + "FeaturesBetterTrainingNoise" + f"{na}" + "a.npy"
+    feature_file_t = PathRaw + "/" + Prefix + "FeaturesBetterTrainingNoise" + f"{na}" + "t.npy"
 
     X, anch_pos = [], []
     my_file = Path(feature_file_x)
@@ -329,8 +329,8 @@ def calcLoc(
         elif method == "Triplet":
             # Initialize Siamese Network
             input_dim = X.shape[1]
-            learning_rate = 0.0003
-            num_epochs = 500
+            learning_rate = 0.0005
+            num_epochs = 1000
             device = "cuda" if torch.cuda.is_available() else "cpu"
 
             dataset = TripletDataset(X, anch_pos, y_train, device=device)
@@ -339,6 +339,8 @@ def calcLoc(
             model.to(device)
             criterion = TripletLoss()
             optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+            # scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+
 
             for epoch in (pbar := tqdm(range(num_epochs))):
                 model.train()
@@ -352,7 +354,7 @@ def calcLoc(
 
                     optimizer.step()
                     total_loss += loss.item()
-                    break
+                # scheduler.step()
                 pbar.set_description(f"Epoch {epoch + 1}/{num_epochs}, Loss: {total_loss / len(dataloader):.4f}")
 
             first = True
