@@ -8,6 +8,7 @@ from siamese import SiameseDataset, SiameseLoss, SiameseNetwork
 from triplet import TripletDataset, TripletLoss, TripletNetwork
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from torch.optim import lr_scheduler
 
 Current_Best_Mean_Score = [10.78, 14.07, 34.43]
 Current_Best_Loss = [19352.9124, 10078.6687, 19000]
@@ -339,6 +340,7 @@ def calcLoc(
             model.to(device)
             criterion = TripletLoss()
             optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+            exp_lr_scheduler = lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.7)
 
             for epoch in (pbar := tqdm(range(num_epochs))):
                 model.train()
@@ -352,7 +354,8 @@ def calcLoc(
 
                     optimizer.step()
                     total_loss += loss.item()
-                    break
+
+                exp_lr_scheduler.step()
                 pbar.set_description(f"Epoch {epoch + 1}/{num_epochs}, Loss: {total_loss / len(dataloader):.4f}")
 
             first = True
