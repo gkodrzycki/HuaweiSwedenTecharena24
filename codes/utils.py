@@ -138,12 +138,12 @@ def calcLoc(
                 model.train()
                 total_loss = 0
                 for x1, x2, real_y1 in dataloader:
-                    optimizer.zero_grad()
                     x1_f, x2_f = extract_features(x1), extract_features(x2)
+                    optimizer.zero_grad()
                     torch.tensor(x1_f).to("cuda")
                     torch.tensor(x2_f).to("cuda")
                     z1, z2 = model(x1_f, x2_f)
-                    loss = criterion(x1, x2, z1, z2, real_y1)
+                    loss = criterion(x1_f, x2_f, z1, z2, real_y1)
                     loss.backward()
 
                     optimizer.step()
