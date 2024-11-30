@@ -50,6 +50,58 @@ class SiameseDataset(Dataset):
             torch.tensor(real_y1, dtype=torch.float32).to(self.device),
         )
 
+import torch
+import torch.nn as nn
+import numpy as np
+
+class FeatureExtractor(nn.Module):
+    def __init__(self, device="cuda"):
+        """
+        Initialize the FeatureExtractor.
+        Args:
+            n_ue_ant (int): Number of UE antennas.
+            n_bs_ant (int): Number of BS antennas.
+            noise_std (float): Standard deviation of Gaussian noise.
+            device (str): Device to use for computation (e.g., 'cuda' or 'cpu').
+        """
+        super(FeatureExtractor, self).__init__()
+        self.device = device
+        self.training = False
+
+    def forward(self, csi_data):
+        """
+        Forward pass to extract features from CSI data.
+        Args:
+            csi_data (torch.Tensor): Input CSI data of shape (batch_size, n_ue_ant, n_bs_ant, n_subcarriers).
+        Returns:
+            torch.Tensor: Extracted features of shape (batch_size, feature_dim).
+        """
+        # Step 1: Add Gaussian noise (only during training)
+
+        n_samples, n_ue_ant, n_bs_ant, n_subcarriers = csi_data.shape
+        if self.training:
+            noise = np.sqrt(0.5) * (np.random.randn(*csi_data.shape))
+            csi_data = csi_data + noise
+
+        # Step 2: Compute Frobenius norm and normalize
+        fro_norms = torch.sqrt(torch.sum(torch.abs(csi_data) ** 2, dim=(1, 2, 3)))
+        csi_data = csi_data / fro_norms[:, np.newaxis, np.newaxis, np.newaxis]
+
+        # Step 3: Scale by the scaling factor
+
+        scaling_factor = np.sqrt(n_ue_ant * n_bs_ant)
+        csi_data = csi_data * scaling_factor
+
+        # Step 4: Compute 2D Fourier Transform along UE and BS antennas
+        beamspace_data = torch.fft.fft2(csi_data, dim=(1, 2)) / scaling_factor
+
+        # Step 5: Compute magnitude of the beamspace data
+        beamspace_magnitudes = torch.abs(beamspace_data)
+
+        # Step 6: Flatten the beamspace magnitudes
+        features = beamspace_magnitudes.view(beamspace_magnitudes.size(0), -1)
+
+        return features
 
 class SiameseNetworkBase(nn.Module):
     def __init__(self, input_dim, embedding_dim=2):
@@ -68,8 +120,10 @@ class SiameseNetworkBase(nn.Module):
         self.fc5 = nn.Linear(64, 32)
         self.fc6 = nn.Linear(32, embedding_dim)
         self.dropout = nn.Dropout(0.5)
+        self.feature_extractor = FeatureExtractor()
 
     def forward(self, x):
+        x = self.feature_extractor(x)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = F.relu(self.fc3(x))

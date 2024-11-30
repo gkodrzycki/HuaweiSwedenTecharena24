@@ -128,6 +128,7 @@ def calcLoc(
             dataset = SiameseDataset(X, valid_anchors, y_train, device=device)
             dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
             model = SiameseNetwork(input_dim)
+            model.training = True
             model.to(device)
             criterion = SiameseLoss()
             optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -151,6 +152,7 @@ def calcLoc(
             first = True
             with torch.no_grad():
                 predictions = []
+                model.training = False
                 for x1 in tqdm(X):
                     x1_tensor = torch.tensor(x1, dtype=torch.float32).unsqueeze(0)
                     z1, _ = model(x1_tensor.to(device), x1_tensor.to(device))
