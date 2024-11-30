@@ -48,7 +48,7 @@ class TripletDataset(Dataset):
         snr_linear = 10 ** (snr_db / 10)
 
         noise_power = signal_power / snr_linear
-        noise = np.random.normal(0, np.sqrt(noise_power / 2), size=x.shape) + 1j * np.random.normal(0, np.sqrt(noise_power / 2), size=x.shape)
+        noise = np.sqrt(0.5) * (np.random.normal(0, np.sqrt(noise_power / 2), size=x.shape) + 1j * np.random.normal(0, np.sqrt(noise_power / 2), size=x.shape))
 
         if withNoise == True: 
             x = x + noise
@@ -83,7 +83,7 @@ class TripletDataset(Dataset):
         normal = np.random.rand()
         new_noise = False
     
-        if (normal < 0.25):
+        if (normal < 0.1):
             # print(normal)
             new_noise = True
         # print(idx)
