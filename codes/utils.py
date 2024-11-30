@@ -337,6 +337,7 @@ def calcLoc(
             dataloader = DataLoader(dataset, batch_size=1024, shuffle=True)
             model = TripletNetwork(input_dim)
             model.to(device)
+
             triplet_loss_fn = TripletLoss()
             semi_supervised_loss_fn = SemiSupervisedLoss()
 
@@ -357,7 +358,7 @@ def calcLoc(
                     triplet_loss = triplet_loss_fn(y_close, y_anchor, y_far, y_true_anchor)
 
                     # Compute Semi-Supervised Loss
-                    semi_supervised_loss = semi_supervised_loss_fn(y_anchor, y_true_anchor)
+                    semi_supervised_loss = semi_supervised_loss_fn(y_close, y_anchor, y_far, y_true_anchor)
 
                     # Combine losses
                     loss = triplet_loss + semi_supervised_loss

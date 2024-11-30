@@ -174,30 +174,33 @@ class TripletLoss(nn.Module):
             return self.exp_loss(y_close, y_anchor, y_far, y_true_anchor)
         
 
-class SemiSupervisedLoss(torch.nn.Module):
-    def __init__(self, threshold=0.9):
-        super(SemiSupervisedLoss, self).__init__()
-        self.threshold = threshold
+import torch
+import torch.nn.functional as F
 
-    def forward(self, predictions, true_labels=None):
+class SemiSupervisedLoss(torch.nn.Module):
+    def __init__(self, margin=1.0, weight_unsupervised=0.1):
+        super(SemiSupervisedLoss, self).__init__()
+        self.margin = margin
+        self.weight_unsupervised = weight_unsupervised
+
+    def forward(self, y_close, y_anchor, y_far, y_true_anchor):
         """
         Args:
-            predictions: Predicted logits from the model (B, C).
-            true_labels: Ground truth labels for the labeled data (B,) or None.
+            y_close: Embedding of close points (positive samples).
+            y_anchor: Embedding of anchor points.
+            y_far: Embedding of far points (negative samples).
+            y_true_anchor: Ground truth positions for anchors (optional).
+        Returns:
+            Loss value (float).
         """
-        # Supervised loss for labeled data
-        supervised_loss = 0
-        if true_labels is not None:
-            supervised_loss = F.cross_entropy(predictions, true_labels)
+        # Supervised Triplet Loss
+        positive_distance = F.pairwise_distance(y_anchor, y_close, p=2)
+        negative_distance = F.pairwise_distance(y_anchor, y_far, p=2)
+        supervised_loss = F.relu(positive_distance - negative_distance + self.margin).mean()
 
-        # Pseudo-labeling for unlabeled data
-        with torch.no_grad():
-            probabilities = F.softmax(predictions, dim=1)
-            pseudo_labels = torch.argmax(probabilities, dim=1)
-            max_probs = torch.max(probabilities, dim=1)[0]
+        # Unsupervised Consistency Penalty
+        unsupervised_loss = torch.mean((y_true_anchor - y_anchor) ** 2)
 
-        # Mask for confident predictions
-        mask = max_probs > self.threshold
-        pseudo_loss = F.cross_entropy(predictions[mask], pseudo_labels[mask]) if mask.any() else 0
-
-        return supervised_loss + pseudo_loss
+        # Combined Loss
+        total_loss = supervised_loss + self.weight_unsupervised * unsupervised_loss
+        return total_loss
