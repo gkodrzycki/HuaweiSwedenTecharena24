@@ -139,7 +139,7 @@ def calcLoc(
                 total_loss = 0
                 for x1, x2, real_y1 in dataloader:
                     optimizer.zero_grad()
-
+                    x1_f, x2_f = extract_features(x1), extract_features(x2)
                     z1, z2 = model(x1, x2)
                     loss = criterion(x1, x2, z1, z2, real_y1)
                     loss.backward()
