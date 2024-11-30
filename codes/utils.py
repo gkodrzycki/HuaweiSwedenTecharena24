@@ -14,51 +14,38 @@ Current_Best_Loss = [19352.9124, 10078.6687, 19000]
 
 
 def extract_features_train_data(csi_data, train_positions):
-
-
     np.random.seed(42)
-
-
     n_samples, n_ue_ant, n_bs_ant, n_subcarriers = csi_data.shape
 
-    augmentation_size = 4
-
+    augmentation_size = 0
     augmented_csi_data = []
     augmented_train_positions = []
-    for(i, pos) in tqdm(enumerate(train_positions), total=len(train_positions)):
+    for (i, pos) in tqdm(enumerate(train_positions), total=len(train_positions)):
         # print(f"Position: {pos}, channel data: {csi_data[i].shape}")
 
         for _ in range(augmentation_size):
             # print(csi_data[i].shape)
             # print(np.random.randn(*csi_data[i].shape))
             signal_power = np.mean(np.abs(csi_data[i]) ** 2)
-
             snr_db = 0
             snr_linear = 10 ** (snr_db / 10)
-
             noise_power = signal_power / snr_linear
             noise = np.random.normal(0, np.sqrt(noise_power / 2), size=csi_data[i].shape)
-
             augmented_csi_data.append(csi_data[i] + noise)
             augmented_train_positions.append(pos)
-        
+
     # print(f"Augmented CSI Data: {len(augmented_csi_data)}, Augmented Train Positions: {len(augmented_train_positions)}")
     # print(f"aug_csi_data: {np.array(augmented_csi_data).shape}, aug_train_positions: {np.array(augmented_train_positions).shape}")
     # print(f"CSI Data: {csi_data.shape}, Train Positions: {train_positions.shape}")
-    
+
     csi_indexes = np.arange(0, train_positions.shape[0], 1)
     if augmentation_size > 0:
-        
-        csi_data = np.array(augmented_csi_data)
+        csi_data = np.concatenate((csi_data, np.array(augmented_csi_data)))
         print("csi_data: ", csi_data.shape)
-        train_positions = np.array(augmented_train_positions)
+        train_positions = np.concatenate((train_positions, np.array(augmented_train_positions)))
         print("train_positions: ", train_positions.shape)
         csi_indexes = np.arange(0, train_positions.shape[0], 1)
         print("csi_indexes: ", csi_indexes.shape)
-
-    # print("after concat")
-    # print(f"CSI Data: {csi_data.shape}, Train Positions: {train_positions.shape}")
-
     # Step 1: Compute Frobenius norm for each sample (20000 samples)
     fro_norms = np.sqrt(np.sum(np.abs(csi_data) ** 2, axis=(1, 2, 3)))  # Shape: (20000,)
 
