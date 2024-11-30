@@ -20,22 +20,29 @@ class TripletDataset(Dataset):
         self.valid_positions = valid_positions
         self.device = device
 
-        self.distances = {}
-        for i, _ in tqdm(enumerate(self.X), total=len(self.X)):
-            y_anchor = self.valid_positions[i]
-            for j, x in enumerate(self.X):
-                y = self.valid_positions[j]
-                if not i in self.distances:
-                    self.distances[i] = []
-                self.distances[i].append((np.sqrt(np.sum(y_anchor - y) ** 2), x))
+        # self.distances = {}
+        # for i, _ in tqdm(enumerate(self.X), total=len(self.X)):
+        #     y_anchor = self.valid_positions[i]
+        #     for j, x in enumerate(self.X):
+        #         y = self.valid_positions[j]
+        #         if not i in self.distances:
+        #             self.distances[i] = []
+        #         self.distances[i].append((np.sqrt(np.sum(y_anchor - y) ** 2), x))
             
-            self.distances[i].sort(key=lambda x: x[0])
+        #     self.distances[i].sort(key=lambda x: x[0])
+        self.position_distances = torch.cdist(self.valid_positions, self.valid_positions)
+
+        self.distance_ranking = {}
+        for i in range(len(X)):
+            # Sort indices by position distance, excluding self
+            sorted_indices = torch.argsort(self.position_distances[i])
+            self.distance_ranking[i] = sorted_indices[1:]
 
 
     def __len__(self):
         return len(self.valid_anchors)
 
-    def __getitem__(self, idx):
+    # def __getitem__(self, idx):
 
 
         i = self.valid_anchors[idx]
@@ -68,6 +75,28 @@ class TripletDataset(Dataset):
         x_far = distance_for_x[x_far_idx][1]
 
        
+        return (
+            torch.tensor(x_close, dtype=torch.float32).to(self.device), 
+            torch.tensor(x_anchor, dtype=torch.float32).to(self.device), 
+            torch.tensor(x_far, dtype=torch.float32).to(self.device), 
+            torch.tensor(y_anchor, dtype=torch.float32).to(self.device), 
+        )
+
+    def __getitem__(self, idx):
+        x_anchor = self.X[idx].to(self.device)
+        y_anchor = self.valid_positions[idx].to(self.device)
+
+        # Sampling strategy based on position distances
+        ranked_indices = self.distance_ranking[idx]
+        
+        # Select a close point (first few in the ranking)
+        close_idx = ranked_indices[np.random.randint(0, min(5, len(ranked_indices)))].item()
+        x_close = self.X[close_idx].to(self.device)
+        
+        # Select a far point (from the last part of the ranking)
+        far_idx = ranked_indices[np.random.randint(len(ranked_indices) - 5, len(ranked_indices))].item()
+        x_far = self.X[far_idx].to(self.device)
+
         return (
             torch.tensor(x_close, dtype=torch.float32).to(self.device), 
             torch.tensor(x_anchor, dtype=torch.float32).to(self.device), 
@@ -137,46 +166,89 @@ class TripletNetwork(nn.Module):
         return output_close, output_anchor, output_far
 
 
+# class TripletLoss(nn.Module):
+#     def __init__(self, M=0.2):
+#         """
+#         Initialize the Siamese Loss function
+#         """
+#         self.type_loss = "MarginLoss"
+#         self.M = M
+#         super(TripletLoss, self).__init__()
+
+#     def margin_loss(self, y_close, y_anchor, y_far, y_true_anchor):
+#         distance_close = torch.sqrt(torch.sum((y_close - y_anchor) ** 2, dim=1) + 1e-6)
+#         distance_far = torch.sqrt(torch.sum((y_far - y_anchor) ** 2, dim=1) + 1e-6)
+
+#         loss = torch.sum(F.relu(distance_close - distance_far + self.M)) / y_close.shape[0]
+
+#         # print(y_anchor.shape, y_true_anchor.shape)
+#         distance_gt = torch.sum((y_anchor - y_true_anchor) ** 2, dim=1)
+#         loss_gt = torch.sum(distance_gt) / y_close.shape[0]
+
+#         # loss_gt = 0
+
+#         return loss + loss_gt
+    
+#     def exp_loss(self, y_close, y_anchor, y_far, y_true_anchor):
+#         distance_close = torch.sqrt(torch.sum((y_close - y_anchor) ** 2, dim=1) + 1e-6)
+#         distance_far = torch.sqrt(torch.sum((y_far - y_anchor) ** 2, dim=1) + 1e-6)
+
+#         loss = torch.log(torch.sum(torch.exp(distance_close - distance_far))) / 2000
+
+#         distance_gt = torch.sum((y_anchor - y_true_anchor) ** 2, dim=1)
+#         loss_gt = torch.sum(distance_gt) / y_close.shape[0]
+
+#         return loss + loss_gt
+
+
+#     def forward(self, y_close, y_anchor, y_far, y_true_anchor):
+
+#         if self.type_loss == "MarginLoss":
+#             return self.margin_loss(y_close, y_anchor, y_far, y_true_anchor)   
+#         elif self.type_loss == "ExpLoss":
+#             return self.exp_loss(y_close, y_anchor, y_far, y_true_anchor)
+        
+
 class TripletLoss(nn.Module):
     def __init__(self, M=0.2):
         """
-        Initialize the Siamese Loss function
+        Initialize the Triple Loss function with added adaptivity
         """
         self.type_loss = "MarginLoss"
         self.M = M
         super(TripletLoss, self).__init__()
 
     def margin_loss(self, y_close, y_anchor, y_far, y_true_anchor):
+        # Compute Euclidean distances with numerical stability
         distance_close = torch.sqrt(torch.sum((y_close - y_anchor) ** 2, dim=1) + 1e-6)
         distance_far = torch.sqrt(torch.sum((y_far - y_anchor) ** 2, dim=1) + 1e-6)
 
+        # Margin-based triplet loss
         loss = torch.sum(F.relu(distance_close - distance_far + self.M)) / y_close.shape[0]
 
-        # print(y_anchor.shape, y_true_anchor.shape)
+        # Ground truth positioning loss
         distance_gt = torch.sum((y_anchor - y_true_anchor) ** 2, dim=1)
         loss_gt = torch.sum(distance_gt) / y_close.shape[0]
 
-        # loss_gt = 0
-
-        return loss + loss_gt
+        return loss + 0.1 * loss_gt
     
     def exp_loss(self, y_close, y_anchor, y_far, y_true_anchor):
+        # Exponential loss variant
         distance_close = torch.sqrt(torch.sum((y_close - y_anchor) ** 2, dim=1) + 1e-6)
         distance_far = torch.sqrt(torch.sum((y_far - y_anchor) ** 2, dim=1) + 1e-6)
 
+        # Logarithmic loss to handle exponential distances
         loss = torch.log(torch.sum(torch.exp(distance_close - distance_far))) / 2000
 
+        # Ground truth positioning loss
         distance_gt = torch.sum((y_anchor - y_true_anchor) ** 2, dim=1)
         loss_gt = torch.sum(distance_gt) / y_close.shape[0]
 
-        return loss + loss_gt
-
+        return loss + 0.1 * loss_gt
 
     def forward(self, y_close, y_anchor, y_far, y_true_anchor):
-
+        # Flexible loss computation
         if self.type_loss == "MarginLoss":
             return self.margin_loss(y_close, y_anchor, y_far, y_true_anchor)   
         elif self.type_loss == "ExpLoss":
             return self.exp_loss(y_close, y_anchor, y_far, y_true_anchor)
-        
-
