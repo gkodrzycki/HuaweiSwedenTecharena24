@@ -95,7 +95,7 @@ class FeatureExtractor(nn.Module):
         # Step 6: Flatten the beamspace magnitudes
         features = beamspace_magnitudes.to('cpu').numpy().reshape(n_samples, -1)
 
-        return torch.tensor(features)
+        return torch.tensor(features).to('cuda')
 
 
 class SiameseNetworkBase(nn.Module):
