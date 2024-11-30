@@ -57,14 +57,14 @@ class TripletDataset(Dataset):
         x = x / fro_norms
 
 
-        scaling_factor = np.sqrt(n_ue_ant * n_bs_ant * n_subcarriers)
+        scaling_factor = np.sqrt(n_ue_ant * n_bs_ant)
         x = x * scaling_factor
 
-        beamspace_batch = np.fft.fftn(x, axes=(0,1,2))
+        beamspace_batch = np.fft.fft2(x, axes=(0,1))
 
         # print(f"beamspace_batch: {beamspace_batch.shape}")
 
-        beamspace_batch /= np.sqrt(n_ue_ant * n_bs_ant * n_subcarriers)  # Normalize by number of antennas
+        beamspace_batch /= np.sqrt(n_ue_ant * n_bs_ant)  # Normalize by number of antennas
 
         # print(f"beamspace_batch v2: {beamspace_batch.shape}")
 
