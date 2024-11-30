@@ -144,31 +144,31 @@ class TripletNetworkBase(nn.Module):
         self.fc4 = nn.Linear(128, 64)
         self.fc5 = nn.Linear(64, 32)
         self.fc6 = nn.Linear(32, embedding_dim)
-        self.bn1 = nn.BatchNorm1d(1024)
-        self.bn2 = nn.BatchNorm1d(512)
-        self.bn3 = nn.BatchNorm1d(256)
-        self.bn4 = nn.BatchNorm1d(128)
-        self.bn5 = nn.BatchNorm1d(64)
-        self.bn6 = nn.BatchNorm1d(32)
-        self.dropout = nn.Dropout(0.5)
+        # self.bn1 = nn.BatchNorm1d(1024)
+        # self.bn2 = nn.BatchNorm1d(512)
+        # self.bn3 = nn.BatchNorm1d(256)
+        # self.bn4 = nn.BatchNorm1d(128)
+        # self.bn5 = nn.BatchNorm1d(64)
+        # self.bn6 = nn.BatchNorm1d(32)
+        # self.dropout = nn.Dropout(0.5)
 
     def forward(self, x):
-        x = F.relu(self.fc(x))
+        x = F.sigmoid(self.fc(x))
         # x = self.bn1(x)
 
-        x = F.relu(self.fc1(x))
+        x = F.sigmoid(self.fc1(x))
         # x = self.bn2(x)
 
-        x = F.relu(self.fc2(x))
+        x = F.sigmoid(self.fc2(x))
         # x = self.bn3(x)
 
-        x = F.relu(self.fc3(x))
+        x = F.sigmoid(self.fc3(x))
         # x = self.bn4(x)
         
-        x = F.relu(self.fc4(x))
+        x = F.sigmoid(self.fc4(x))
         # x = self.bn5(x)
         
-        x = F.relu(self.fc5(x))
+        x = F.sigmoid(self.fc5(x))
         # x = self.bn6(x)
         
         x = self.fc6(x)
@@ -201,7 +201,7 @@ class TripletLoss(nn.Module):
         distance_close = torch.sqrt(torch.sum((y_close - y_anchor) ** 2, dim=1) + 1e-6)
         distance_far = torch.sqrt(torch.sum((y_far - y_anchor) ** 2, dim=1) + 1e-6)
 
-        loss = torch.sum(F.relu(distance_close - distance_far + self.M)) / y_close.shape[0]
+        loss = torch.sum(F.sigmoid(distance_close - distance_far + self.M)) / y_close.shape[0]
 
         # print(y_anchor.shape, y_true_anchor.shape)
 
