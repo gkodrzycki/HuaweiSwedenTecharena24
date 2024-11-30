@@ -50,9 +50,6 @@ class SiameseDataset(Dataset):
             torch.tensor(real_y1, dtype=torch.float32).to(self.device),
         )
 
-import torch
-import torch.nn as nn
-import numpy as np
 
 class FeatureExtractor(nn.Module):
     def __init__(self, device="cuda"):
@@ -79,9 +76,6 @@ class FeatureExtractor(nn.Module):
         # Step 1: Add Gaussian noise (only during training)
 
         n_samples, n_ue_ant, n_bs_ant, n_subcarriers = csi_data.shape
-        if self.training:
-            noise = np.sqrt(0.5) * (np.random.randn(*csi_data.shape))
-            csi_data = csi_data + noise
 
         # Step 2: Compute Frobenius norm and normalize
         fro_norms = torch.sqrt(torch.sum(torch.abs(csi_data) ** 2, dim=(1, 2, 3)))
@@ -102,6 +96,7 @@ class FeatureExtractor(nn.Module):
         features = beamspace_magnitudes.view(beamspace_magnitudes.size(0), -1)
 
         return features
+
 
 class SiameseNetworkBase(nn.Module):
     def __init__(self, input_dim, embedding_dim=2):

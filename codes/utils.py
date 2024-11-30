@@ -116,7 +116,7 @@ def calcLoc(
 
     if len(valid_anchors) > 0:
         print(f"Training model with {len(valid_anchors)} anchor points...")
-        X_train = X[valid_anchors]
+        X_train = H[valid_anchors]
         y_train = np.array(valid_positions)
 
         if method == "Siamese":
@@ -125,7 +125,7 @@ def calcLoc(
             learning_rate = 0.0003
             num_epochs = 300
             device = "cuda" if torch.cuda.is_available() else "cpu"
-            dataset = SiameseDataset(X, valid_anchors, y_train, device=device)
+            dataset = SiameseDataset(H, valid_anchors, y_train, device=device)
             dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
             model = SiameseNetwork(input_dim)
             model.training = True
