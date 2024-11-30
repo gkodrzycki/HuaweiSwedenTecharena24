@@ -125,7 +125,7 @@ def calcLoc(
             learning_rate = 0.0003
             num_epochs = 300
             device = "cuda" if torch.cuda.is_available() else "cpu"
-            dataset = SiameseDataset(H, valid_anchors, y_train, device=device)
+            dataset = SiameseDataset(H, valid_anchors, y_train, device="cpu")
             dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
             model = SiameseNetwork(input_dim)
             model.training = True
@@ -140,7 +140,9 @@ def calcLoc(
                 for x1, x2, real_y1 in dataloader:
                     optimizer.zero_grad()
                     x1_f, x2_f = extract_features(x1), extract_features(x2)
-                    z1, z2 = model(x1, x2)
+                    torch.tensor(x1_f).to("cuda")
+                    torch.tensor(x2_f).to("cuda")
+                    z1, z2 = model(x1_f, x2_f)
                     loss = criterion(x1, x2, z1, z2, real_y1)
                     loss.backward()
 
