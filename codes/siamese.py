@@ -93,9 +93,9 @@ class FeatureExtractor(nn.Module):
         beamspace_magnitudes = torch.abs(beamspace_data)
 
         # Step 6: Flatten the beamspace magnitudes
-        features = beamspace_magnitudes.view(beamspace_magnitudes.size(0), -1)
+        features = beamspace_magnitudes.to('cpu').numpy().reshape(n_samples, -1)
 
-        return features
+        return torch.tensor(features)
 
 
 class SiameseNetworkBase(nn.Module):
