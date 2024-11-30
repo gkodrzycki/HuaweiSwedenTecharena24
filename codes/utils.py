@@ -330,7 +330,7 @@ def calcLoc(
             # Initialize Siamese Network
             input_dim = X.shape[1]
             learning_rate = 0.0003
-            num_epochs = 1000
+            num_epochs = 500
             device = "cuda" if torch.cuda.is_available() else "cpu"
 
             dataset = TripletDataset(X, anch_pos, y_train, device=device)

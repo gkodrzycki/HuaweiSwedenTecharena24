@@ -53,10 +53,16 @@ class TripletDataset(Dataset):
 
         # combined.sort(key=lambda x: x[0])
 
+        signal_power = np.mean(x_anchor ** 2)
 
-        x_close_idx = np.random.randint(0, len(distance_for_x)//2)
-        x_close = distance_for_x[x_close_idx][1]
-        x_far_idx = np.random.randint(x_close_idx, len(distance_for_x))
+        snr_db = 0
+        snr_linear = 10 ** (snr_db / 10)
+
+        noise_power = signal_power / snr_linear
+        noise = np.random.normal(0, np.sqrt(noise_power / 2), size=x_anchor[i].shape)
+
+        x_close = x_anchor + noise
+        x_far_idx = np.random.randint(len(distance_for_x)//2, len(distance_for_x))
         x_far = distance_for_x[x_far_idx][1]
 
        
@@ -116,19 +122,41 @@ class TripletLoss(nn.Module):
         """
         Initialize the Siamese Loss function
         """
+        self.type_loss = "MarginLoss"
         self.M = M
         super(TripletLoss, self).__init__()
 
-    def forward(self, y_close, y_anchor, y_far, y_true_anchor):
-
+    def margin_loss(self, y_close, y_anchor, y_far, y_true_anchor):
         distance_close = torch.sqrt(torch.sum((y_close - y_anchor) ** 2, dim=1) + 1e-6)
         distance_far = torch.sqrt(torch.sum((y_far - y_anchor) ** 2, dim=1) + 1e-6)
 
-        loss = torch.sum(F.relu(distance_close - distance_far + self.M))
+        loss = torch.sum(F.relu(distance_close - distance_far + self.M)) / y_close.shape[0]
 
         # print(y_anchor.shape, y_true_anchor.shape)
         distance_gt = torch.sum((y_anchor - y_true_anchor) ** 2, dim=1)
-        loss_gt = torch.sum(distance_gt)
+        loss_gt = torch.sum(distance_gt) / y_close.shape[0]
+
+        # loss_gt = 0
 
         return loss + loss_gt
+    
+    def exp_loss(self, y_close, y_anchor, y_far, y_true_anchor):
+        distance_close = torch.sqrt(torch.sum((y_close - y_anchor) ** 2, dim=1) + 1e-6)
+        distance_far = torch.sqrt(torch.sum((y_far - y_anchor) ** 2, dim=1) + 1e-6)
+
+        loss = torch.log(torch.sum(torch.exp(distance_close - distance_far))) / 2000
+
+        distance_gt = torch.sum((y_anchor - y_true_anchor) ** 2, dim=1)
+        loss_gt = torch.sum(distance_gt) / y_close.shape[0]
+
+        return loss + loss_gt
+
+
+    def forward(self, y_close, y_anchor, y_far, y_true_anchor):
+
+        if self.type_loss == "MarginLoss":
+            return self.margin_loss(y_close, y_anchor, y_far, y_true_anchor)   
+        elif self.type_loss == "ExpLoss":
+            return self.exp_loss(y_close, y_anchor, y_far, y_true_anchor)
+        
 
