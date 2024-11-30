@@ -52,6 +52,43 @@ def extract_features(csi_data):
     return beamspace_magnitudes.reshape(n_samples, -1)
 
 
+
+def generate_augmented_data(X, valid_anchors, valid_positions):
+    """
+    Generate augmented data for training the Siamese Network.
+    Args:
+        X: Input features (numpy array)
+        valid_anchors: List of indices for valid anchors
+        valid_positions: List of positions corresponding to valid anchors
+    Returns:
+        Augmented data (numpy array)
+    """
+    np.random.seed(42)
+
+    X_aug = []
+    valid_anchors_aug = []
+    valid_positions_aug = []
+    for i,idx in enumerate(valid_anchors):
+
+        for _ in range(3):
+            x1 = X[idx]
+
+            N = 0.5 * (np.random.randn(x1.shape[0]))
+            x1 += N
+
+            # print(f"X1: {x1.shape}, X: {X.shape}")
+            X_aug.append(x1)
+            valid_anchors_aug.append(len(X) + i)
+            valid_positions_aug.append(valid_positions[i])
+            
+
+    print("DONE!")
+    X = np.concatenate((X, np.array(X_aug)))
+    valid_anchors = np.concatenate((valid_anchors, np.array(valid_anchors_aug))) 
+    valid_positions = np.concatenate((valid_positions, np.array(valid_positions_aug)))
+
+    return X, valid_anchors, valid_positions
+
 # This funcation calculates the positions of all channels, should be implemented by the participants
 def calcLoc(
     H,
@@ -109,6 +146,10 @@ def calcLoc(
     valid_positions = []
 
     for anchor in anch_pos:
+        # maks = np.max(anchor[1:])
+        # minn = np.min(anchor[1:])
+        # print("Max: ", maks, " Min: ", minn)
+        # exit(0)
         idx = int(anchor[0]) - 1  # Convert to 0-based index
         if idx < len(H):  # Only use anchors that are in our current slice
             valid_anchors.append(idx)
@@ -123,10 +164,15 @@ def calcLoc(
             # Initialize Siamese Network
             input_dim = X.shape[1]
             learning_rate = 0.0003
-            num_epochs = 300
+            num_epochs = 200
             device = "cuda" if torch.cuda.is_available() else "cpu"
-            dataset = SiameseDataset(X, valid_anchors, y_train, device=device)
-            dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
+
+            X_augmented, valid_anchors_augmented, y_train_augmented = generate_augmented_data(X, valid_anchors, y_train)
+            
+            print(f"X_augmented: {X_augmented.shape}, valid_anchors_augmented: {valid_anchors_augmented.shape}, y_train_augmented: {y_train_augmented.shape}")
+
+            dataset = SiameseDataset(X_augmented, valid_anchors_augmented, y_train_augmented, device=device)
+            dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
             model = SiameseNetwork(input_dim)
             model.to(device)
             criterion = SiameseLoss()

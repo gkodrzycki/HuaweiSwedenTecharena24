@@ -17,7 +17,6 @@ class SiameseDataset(Dataset):
         self.X = X
         self.valid_anchors = valid_anchors
         self.valid_positions = valid_positions
-        self.valid_anchors = self.valid_anchors
         self.device = device
 
     def __len__(self):
@@ -38,9 +37,9 @@ class SiameseDataset(Dataset):
 
         x2 = self.X[self.valid_anchors[j]]
 
-        B = 64
-        N = np.sqrt(0.5) * (np.random.randn(x1.shape[0]))
-        x1 += N
+        # B = 64
+        # N = np.sqrt(0.5) * (np.random.randn(x1.shape[0]))
+        # x1 += N
 
         real_y1 = self.valid_positions[idx]
 
