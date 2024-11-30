@@ -153,22 +153,22 @@ class TripletNetworkBase(nn.Module):
         # self.dropout = nn.Dropout(0.5)
 
     def forward(self, x):
-        x = F.sigmoid(self.fc(x))
+        x = F.relu(self.fc(x))
         # x = self.bn1(x)
 
-        x = F.sigmoid(self.fc1(x))
+        x = F.relu(self.fc1(x))
         # x = self.bn2(x)
 
-        x = F.sigmoid(self.fc2(x))
+        x = F.relu(self.fc2(x))
         # x = self.bn3(x)
 
-        x = F.sigmoid(self.fc3(x))
+        x = F.relu(self.fc3(x))
         # x = self.bn4(x)
         
-        x = F.sigmoid(self.fc4(x))
+        x = F.relu(self.fc4(x))
         # x = self.bn5(x)
         
-        x = F.sigmoid(self.fc5(x))
+        x = self.fc5(x)
         # x = self.bn6(x)
         
         x = self.fc6(x)
