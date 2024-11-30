@@ -5,34 +5,56 @@ import numpy as np
 import torch
 import xgboost as xgb
 from siamese import SiameseDataset, SiameseLoss, SiameseNetwork
+from triplet import TripletDataset, TripletLoss, TripletNetwork
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 Current_Best_Mean_Score = [10.78, 14.07, 34.43]
+Current_Best_Loss = [19352.9124, 10078.6687, 19000]
 
 
 def extract_features_train_data(csi_data, train_positions):
 
+
+    np.random.seed(42)
+
+
     n_samples, n_ue_ant, n_bs_ant, n_subcarriers = csi_data.shape
+
+    augmentation_size = 0
 
     augmented_csi_data = []
     augmented_train_positions = []
-    for(i, pos) in enumerate(train_positions):
+    for(i, pos) in tqdm(enumerate(train_positions), total=len(train_positions)):
         # print(f"Position: {pos}, channel data: {csi_data[i].shape}")
 
-        for _ in range(3):
+        for _ in range(augmentation_size):
             # print(csi_data[i].shape)
             # print(np.random.randn(*csi_data[i].shape))
-            Noise = np.sqrt(0.5) * (np.random.randn(*csi_data[i].shape))
-            augmented_csi_data.append(csi_data[i] + Noise)
+            signal_power = np.mean(np.abs(csi_data[i]) ** 2)
+
+            snr_db = 0
+            snr_linear = 10 ** (snr_db / 10)
+
+            noise_power = signal_power / snr_linear
+            noise = np.random.normal(0, np.sqrt(noise_power / 2), size=csi_data[i].shape)
+
+            augmented_csi_data.append(csi_data[i] + noise)
             augmented_train_positions.append(pos)
         
     # print(f"Augmented CSI Data: {len(augmented_csi_data)}, Augmented Train Positions: {len(augmented_train_positions)}")
     # print(f"aug_csi_data: {np.array(augmented_csi_data).shape}, aug_train_positions: {np.array(augmented_train_positions).shape}")
     # print(f"CSI Data: {csi_data.shape}, Train Positions: {train_positions.shape}")
-    csi_data = np.concatenate((csi_data, np.array(augmented_csi_data)))
-    train_positions = np.concatenate((train_positions, np.array(augmented_train_positions)))
+    
     csi_indexes = np.arange(0, train_positions.shape[0], 1)
+    if augmentation_size > 0:
+        
+        csi_data = np.concatenate((csi_data, np.array(augmented_csi_data)))
+        print("csi_data: ", csi_data.shape)
+        train_positions = np.concatenate((train_positions, np.array(augmented_train_positions)))
+        print("train_positions: ", train_positions.shape)
+        csi_indexes = np.arange(0, train_positions.shape[0], 1)
+        print("csi_indexes: ", csi_indexes.shape)
 
     # print("after concat")
     # print(f"CSI Data: {csi_data.shape}, Train Positions: {train_positions.shape}")
@@ -210,30 +232,38 @@ def calcLoc(
     y_train = np.array(valid_positions)
     
 
-    feature_file = PathRaw + "/" + Prefix + "FeaturesBetterTraining" + f"{na}" + ".npy"
+    feature_file_x = PathRaw + "/" + Prefix + "FeaturesBetterTraining" + f"{na}" + "x.npy"
+    feature_file_a = PathRaw + "/" + Prefix + "FeaturesBetterTraining" + f"{na}" + "a.npy"
+    feature_file_t = PathRaw + "/" + Prefix + "FeaturesBetterTraining" + f"{na}" + "t.npy"
 
-    X = []
-    # my_file = Path(feature_file)
+    X, anch_pos = [], []
+    my_file = Path(feature_file_x)
 
-    # if my_file.exists():
-    #     print(f"Retrieving features from {feature_file}")
-    #     X = np.load(feature_file)
-    # else:
-    print("Extracting features from channel data...")
-    X, anch_pos, y_train = extract_features_train_data(X_train, y_train)
-    print(f"Saving features to file {feature_file}")
-    np.save(feature_file, X)
+    if my_file.exists():
+        print(f"Retrieving features from {feature_file_x}")
+        X = np.load(feature_file_x)
+        anch_pos = np.load(feature_file_a)
+        y_train = np.load(feature_file_t)
+    else:
+        print("Extracting features from channel data...")
+        X, anch_pos, y_train = extract_features_train_data(X_train, y_train)
+        print(f"Saving features to file {feature_file_x}")
+        np.save(feature_file_x, X)
+        np.save(feature_file_a, anch_pos)
+        np.save(feature_file_t, y_train)
 
 
     print(f"X: {X.shape}, y_train: {y_train.shape}")
     if len(valid_anchors) > 0:
         print(f"Training model with {len(anch_pos)} anchor points...")
 
+        print(f"Current Best Loss for dataset {na}: {Current_Best_Loss[int(na) - 1]}")
+
         if method == "Siamese":
             # Initialize Siamese Network
             input_dim = X.shape[1]
             learning_rate = 0.0003
-            num_epochs = 200
+            num_epochs = 100
             device = "cuda" if torch.cuda.is_available() else "cpu"
 
             # X_augmented, valid_anchors_augmented, y_train_augmented = generate_augmented_data(X, valid_anchors, y_train)
@@ -296,6 +326,64 @@ def calcLoc(
             xgb_model = xgb.XGBRegressor(n_estimators=100, max_depth=6, n_jobs=-1)
             xgb_model.fit(X_train, y_train)
             predictions = xgb_model.predict(X)
+        elif method == "Triplet":
+            # Initialize Siamese Network
+            input_dim = X.shape[1]
+            learning_rate = 0.0003
+            num_epochs = 1000
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+
+            dataset = TripletDataset(X, anch_pos, y_train, device=device)
+            dataloader = DataLoader(dataset, batch_size=1024, shuffle=True)
+            model = TripletNetwork(input_dim)
+            model.to(device)
+            criterion = TripletLoss()
+            optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+            for epoch in (pbar := tqdm(range(num_epochs))):
+                model.train()
+                total_loss = 0
+                for x_close, x_anchor, x_far, y_true_anchor in dataloader:
+                    optimizer.zero_grad()
+
+                    y_close, y_anchor, y_far = model(x_close, x_anchor, x_far)
+                    loss = criterion(y_close, y_anchor, y_far, y_true_anchor)
+                    loss.backward()
+
+                    optimizer.step()
+                    total_loss += loss.item()
+                    break
+                pbar.set_description(f"Epoch {epoch + 1}/{num_epochs}, Loss: {total_loss / len(dataloader):.4f}")
+
+            first = True
+            with torch.no_grad():
+
+                feature_file = PathRaw + "/" + Prefix + "FeaturesBetter" + f"{na}" + ".npy"
+
+                X = []
+                my_file = Path(feature_file)
+
+                if my_file.exists():
+                    print(f"Retrieving features from {feature_file}")
+                    X = np.load(feature_file)
+                else:
+                    print("Extracting features from channel data...")
+                    X = extract_features(H)
+                    print(f"Saving features to file {feature_file}")
+                    np.save(feature_file, X)
+
+                predictions = []
+                for x1 in tqdm(X):
+                    x1_tensor = torch.tensor(x1, dtype=torch.float32).unsqueeze(0)
+                    z1, _, _= model(x1_tensor.to(device), x1_tensor.to(device), x1_tensor.to(device))
+                    predictions.append(z1.cpu().numpy())
+                    
+                    if first:
+                        print(z1)
+                        first = False
+
+                predictions = np.array(predictions)
+
         else:
             raise ValueError(f"Invalid method: {method}")
 
