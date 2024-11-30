@@ -11,6 +11,70 @@ from tqdm import tqdm
 Current_Best_Mean_Score = [10.78, 14.07, 34.43]
 
 
+def extract_features_train_data(csi_data, train_positions):
+
+    n_samples, n_ue_ant, n_bs_ant, n_subcarriers = csi_data.shape
+
+    augmented_csi_data = []
+    augmented_train_positions = []
+    for(i, pos) in enumerate(train_positions):
+        # print(f"Position: {pos}, channel data: {csi_data[i].shape}")
+
+        for _ in range(3):
+            # print(csi_data[i].shape)
+            # print(np.random.randn(*csi_data[i].shape))
+            Noise = np.sqrt(0.5) * (np.random.randn(*csi_data[i].shape))
+            augmented_csi_data.append(csi_data[i] + Noise)
+            augmented_train_positions.append(pos)
+        
+    # print(f"Augmented CSI Data: {len(augmented_csi_data)}, Augmented Train Positions: {len(augmented_train_positions)}")
+    # print(f"aug_csi_data: {np.array(augmented_csi_data).shape}, aug_train_positions: {np.array(augmented_train_positions).shape}")
+    # print(f"CSI Data: {csi_data.shape}, Train Positions: {train_positions.shape}")
+    csi_data = np.concatenate((csi_data, np.array(augmented_csi_data)))
+    train_positions = np.concatenate((train_positions, np.array(augmented_train_positions)))
+    csi_indexes = np.arange(0, train_positions.shape[0], 1)
+
+    # print("after concat")
+    # print(f"CSI Data: {csi_data.shape}, Train Positions: {train_positions.shape}")
+
+    # Step 1: Compute Frobenius norm for each sample (20000 samples)
+    fro_norms = np.sqrt(np.sum(np.abs(csi_data) ** 2, axis=(1, 2, 3)))  # Shape: (20000,)
+
+    # Step 2: Normalize each sample
+    # Broadcasting fro_norms to match csi_data shape for division
+    csi_data = csi_data / fro_norms[:, np.newaxis, np.newaxis, np.newaxis]
+
+    del fro_norms
+
+    # Step 3: Scale to desired factor
+    scaling_factor = np.sqrt(n_ue_ant * n_bs_ant)
+    csi_data = csi_data * scaling_factor
+
+    beamspace_magnitudes = []
+    batch_size = 1000
+    # Process in batches to reduce memory usage
+    for start_idx in tqdm(range(0, csi_data.shape[0], batch_size)):
+        end_idx = min(start_idx + batch_size, csi_data.shape[0])
+
+        batch = csi_data[start_idx:end_idx]
+
+        # Step 1: Apply 2D Fourier Transform across UE and BS antennas
+        beamspace_batch = np.fft.fft2(batch, axes=(1, 2))
+
+        # Step 2: Normalize Beamspace Data (Optional)
+        beamspace_batch /= np.sqrt(batch.shape[1] * batch.shape[2])  # Normalize by number of antennas
+
+        test = np.abs(beamspace_batch)
+        print(test.shape)
+        # Store the results in the output array
+        beamspace_magnitudes.append(test)
+
+    beamspace_magnitudes = np.concatenate(beamspace_magnitudes, axis=0)
+
+    # print(f"beamspace_magnitudes: ", beamspace_magnitudes.shape)
+
+    return beamspace_magnitudes.reshape(len(csi_data), -1), csi_indexes, train_positions
+
 def extract_features(csi_data):
 
     n_samples, n_ue_ant, n_bs_ant, n_subcarriers = csi_data.shape
@@ -127,21 +191,7 @@ def calcLoc(
     # Create result array
     loc_result = np.zeros([tol_samp_num, 2], "float")
 
-    feature_file = PathRaw + "/" + Prefix + "FeaturesBetter" + f"{na}" + ".npy"
 
-    X = []
-    my_file = Path(feature_file)
-
-    if my_file.exists():
-        print(f"Retrieving features from {feature_file}")
-        X = np.load(feature_file)
-    else:
-        print("Extracting features from channel data...")
-        X = extract_features(H)
-        print(f"Saving features to file {feature_file}")
-        np.save(feature_file, X)
-
-    # Prepare training data from anchor points that are within our current slice
     valid_anchors = []
     valid_positions = []
 
@@ -155,10 +205,29 @@ def calcLoc(
             valid_anchors.append(idx)
             valid_positions.append(anchor[1:])
 
+
+    X_train = H[valid_anchors]
+    y_train = np.array(valid_positions)
+    
+
+    feature_file = PathRaw + "/" + Prefix + "FeaturesBetterTraining" + f"{na}" + ".npy"
+
+    X = []
+    # my_file = Path(feature_file)
+
+    # if my_file.exists():
+    #     print(f"Retrieving features from {feature_file}")
+    #     X = np.load(feature_file)
+    # else:
+    print("Extracting features from channel data...")
+    X, anch_pos, y_train = extract_features_train_data(X_train, y_train)
+    print(f"Saving features to file {feature_file}")
+    np.save(feature_file, X)
+
+
+    print(f"X: {X.shape}, y_train: {y_train.shape}")
     if len(valid_anchors) > 0:
-        print(f"Training model with {len(valid_anchors)} anchor points...")
-        X_train = X[valid_anchors]
-        y_train = np.array(valid_positions)
+        print(f"Training model with {len(anch_pos)} anchor points...")
 
         if method == "Siamese":
             # Initialize Siamese Network
@@ -167,11 +236,11 @@ def calcLoc(
             num_epochs = 200
             device = "cuda" if torch.cuda.is_available() else "cpu"
 
-            X_augmented, valid_anchors_augmented, y_train_augmented = generate_augmented_data(X, valid_anchors, y_train)
+            # X_augmented, valid_anchors_augmented, y_train_augmented = generate_augmented_data(X, valid_anchors, y_train)
             
-            print(f"X_augmented: {X_augmented.shape}, valid_anchors_augmented: {valid_anchors_augmented.shape}, y_train_augmented: {y_train_augmented.shape}")
+            # print(f"X_augmented: {X_augmented.shape}, valid_anchors_augmented: {valid_anchors_augmented.shape}, y_train_augmented: {y_train_augmented.shape}")
 
-            dataset = SiameseDataset(X_augmented, valid_anchors_augmented, y_train_augmented, device=device)
+            dataset = SiameseDataset(X, anch_pos, y_train, device=device)
             dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
             model = SiameseNetwork(input_dim)
             model.to(device)
@@ -196,6 +265,21 @@ def calcLoc(
             # Calculate predictions
             first = True
             with torch.no_grad():
+
+                feature_file = PathRaw + "/" + Prefix + "FeaturesBetter" + f"{na}" + ".npy"
+
+                X = []
+                my_file = Path(feature_file)
+
+                if my_file.exists():
+                    print(f"Retrieving features from {feature_file}")
+                    X = np.load(feature_file)
+                else:
+                    print("Extracting features from channel data...")
+                    X = extract_features(H)
+                    print(f"Saving features to file {feature_file}")
+                    np.save(feature_file, X)
+
                 predictions = []
                 for x1 in tqdm(X):
                     x1_tensor = torch.tensor(x1, dtype=torch.float32).unsqueeze(0)
