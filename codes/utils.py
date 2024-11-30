@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import xgboost as xgb
 from siamese import SiameseDataset, SiameseLoss, SiameseNetwork
-from triplet import TripletDataset, TripletLoss, TripletNetwork
+from triplet import TripletDataset, TripletLoss, TripletNetwork, SemiSupervisedLoss
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -337,25 +337,36 @@ def calcLoc(
             dataloader = DataLoader(dataset, batch_size=1024, shuffle=True)
             model = TripletNetwork(input_dim)
             model.to(device)
-            criterion = TripletLoss()
+
+            triplet_loss_fn = TripletLoss()
+            semi_supervised_loss_fn = SemiSupervisedLoss()
+
             optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-            # scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
 
             for epoch in (pbar := tqdm(range(num_epochs))):
                 model.train()
                 total_loss = 0
                 for x_close, x_anchor, x_far, y_true_anchor in dataloader:
+
                     optimizer.zero_grad()
 
+                    # Compute embeddings
                     y_close, y_anchor, y_far = model(x_close, x_anchor, x_far)
-                    loss = criterion(y_close, y_anchor, y_far, y_true_anchor)
+
+                    # Compute Triplet Loss
+                    triplet_loss = triplet_loss_fn(y_close, y_anchor, y_far, y_true_anchor)
+
+                    # Compute Semi-Supervised Loss
+                    semi_supervised_loss = semi_supervised_loss_fn(y_anchor, y_true_anchor)
+
+                    # Combine losses
+                    loss = triplet_loss + semi_supervised_loss
                     loss.backward()
 
                     optimizer.step()
                     total_loss += loss.item()
-                # scheduler.step()
-                pbar.set_description(f"Epoch {epoch + 1}/{num_epochs}, Loss: {total_loss / len(dataloader):.4f}")
+                    pbar.set_description(f"Epoch {epoch + 1}/{num_epochs}, Loss: {total_loss / len(dataloader):.4f}")
 
             first = True
             with torch.no_grad():

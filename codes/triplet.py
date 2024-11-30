@@ -122,33 +122,20 @@ class TripletNetworkBase(nn.Module):
         self.fc4 = nn.Linear(128, 64)
         self.fc5 = nn.Linear(64, 32)
         self.fc6 = nn.Linear(32, embedding_dim)
-        self.bn1 = nn.BatchNorm1d(1024)
-        self.bn2 = nn.BatchNorm1d(512)
-        self.bn3 = nn.BatchNorm1d(256)
-        self.bn4 = nn.BatchNorm1d(128)
-        self.bn5 = nn.BatchNorm1d(64)
-        self.bn6 = nn.BatchNorm1d(32)
-        self.dropout = nn.Dropout(0.5)
 
     def forward(self, x):
         x = F.relu(self.fc(x))
-        x = self.bn1(x)
 
         x = F.relu(self.fc1(x))
-        x = self.bn2(x)
 
         x = F.relu(self.fc2(x))
-        x = self.bn3(x)
 
         x = F.relu(self.fc3(x))
-        x = self.bn4(x)
-        
+
         x = F.relu(self.fc4(x))
-        x = self.bn5(x)
-        
+
         x = F.relu(self.fc5(x))
-        x = self.bn6(x)
-        
+
         x = self.fc6(x)
         return x
 
@@ -164,50 +151,6 @@ class TripletNetwork(nn.Module):
         output_far = self.base_network(input_far)
 
         return output_close, output_anchor, output_far
-
-
-# class TripletLoss(nn.Module):
-#     def __init__(self, M=0.2):
-#         """
-#         Initialize the Siamese Loss function
-#         """
-#         self.type_loss = "MarginLoss"
-#         self.M = M
-#         super(TripletLoss, self).__init__()
-
-#     def margin_loss(self, y_close, y_anchor, y_far, y_true_anchor):
-#         distance_close = torch.sqrt(torch.sum((y_close - y_anchor) ** 2, dim=1) + 1e-6)
-#         distance_far = torch.sqrt(torch.sum((y_far - y_anchor) ** 2, dim=1) + 1e-6)
-
-#         loss = torch.sum(F.relu(distance_close - distance_far + self.M)) / y_close.shape[0]
-
-#         # print(y_anchor.shape, y_true_anchor.shape)
-#         distance_gt = torch.sum((y_anchor - y_true_anchor) ** 2, dim=1)
-#         loss_gt = torch.sum(distance_gt) / y_close.shape[0]
-
-#         # loss_gt = 0
-
-#         return loss + loss_gt
-    
-#     def exp_loss(self, y_close, y_anchor, y_far, y_true_anchor):
-#         distance_close = torch.sqrt(torch.sum((y_close - y_anchor) ** 2, dim=1) + 1e-6)
-#         distance_far = torch.sqrt(torch.sum((y_far - y_anchor) ** 2, dim=1) + 1e-6)
-
-#         loss = torch.log(torch.sum(torch.exp(distance_close - distance_far))) / 2000
-
-#         distance_gt = torch.sum((y_anchor - y_true_anchor) ** 2, dim=1)
-#         loss_gt = torch.sum(distance_gt) / y_close.shape[0]
-
-#         return loss + loss_gt
-
-
-#     def forward(self, y_close, y_anchor, y_far, y_true_anchor):
-
-#         if self.type_loss == "MarginLoss":
-#             return self.margin_loss(y_close, y_anchor, y_far, y_true_anchor)   
-#         elif self.type_loss == "ExpLoss":
-#             return self.exp_loss(y_close, y_anchor, y_far, y_true_anchor)
-        
 
 class TripletLoss(nn.Module):
     def __init__(self, M=0.2):
@@ -240,11 +183,7 @@ class TripletLoss(nn.Module):
         # Logarithmic loss to handle exponential distances
         loss = torch.log(torch.sum(torch.exp(distance_close - distance_far))) / 2000
 
-        # Ground truth positioning loss
-        distance_gt = torch.sum((y_anchor - y_true_anchor) ** 2, dim=1)
-        loss_gt = torch.sum(distance_gt) / y_close.shape[0]
-
-        return loss + 0.1 * loss_gt
+        return loss
 
     def forward(self, y_close, y_anchor, y_far, y_true_anchor):
         # Flexible loss computation
@@ -252,3 +191,33 @@ class TripletLoss(nn.Module):
             return self.margin_loss(y_close, y_anchor, y_far, y_true_anchor)   
         elif self.type_loss == "ExpLoss":
             return self.exp_loss(y_close, y_anchor, y_far, y_true_anchor)
+
+
+class SemiSupervisedLoss(torch.nn.Module):
+    def __init__(self, threshold=0.9):
+        super(SemiSupervisedLoss, self).__init__()
+        self.threshold = threshold
+
+    def forward(self, predictions, true_labels=None):
+        """
+        Args:
+            predictions: Predicted logits from the model (B, C).
+            true_labels: Ground truth labels for the labeled data (B,) or None.
+        """
+        # Supervised loss for labeled data
+        supervised_loss = 0
+        if true_labels is not None:
+            supervised_loss = F.cross_entropy(predictions, true_labels)
+
+        # Pseudo-labeling for unlabeled data
+        with torch.no_grad():
+            probabilities = F.softmax(predictions, dim=1)
+            pseudo_labels = torch.argmax(probabilities, dim=1)
+            max_probs = torch.max(probabilities, dim=1)[0]
+
+        # Mask for confident predictions
+        mask = max_probs > self.threshold
+        pseudo_loss = F.cross_entropy(predictions[mask], pseudo_labels[mask]) if mask.any() else 0
+
+        return supervised_loss + pseudo_loss
+
